@@ -11,13 +11,13 @@ import { Controls } from './components/Controls';
 import { STATE_LABEL } from './lib/format';
 
 export function App(): JSX.Element {
-  const { current, health, petState, status, tab } = useEcoStore((s) => ({
-    current: s.current,
-    health: s.health,
-    petState: s.petState,
-    status: s.status,
-    tab: s.tab,
-  }));
+  // Select individual fields. Returning a new object from the selector breaks
+  // under Zustand v5 (Object.is equality) and causes an infinite render loop.
+  const current = useEcoStore((s) => s.current);
+  const health = useEcoStore((s) => s.health);
+  const petState = useEcoStore((s) => s.petState);
+  const status = useEcoStore((s) => s.status);
+  const tab = useEcoStore((s) => s.tab);
   const pushScore = useEcoStore((s) => s.pushScore);
   const setStatus = useEcoStore((s) => s.setStatus);
   const setTab = useEcoStore((s) => s.setTab);

@@ -25,8 +25,10 @@ const TRAY_ICON =
 function positionWindow(): void {
   if (!win) return;
   const { workArea } = screen.getPrimaryDisplay();
-  const [w = SIZES[windowMode].w, h = SIZES[windowMode].h] = win.getSize();
-  win.setPosition(workArea.x + workArea.width - w - 16, workArea.y + workArea.height - h - 16);
+  const [w = SIZES[windowMode].w] = win.getSize();
+  // Dock to the top-right corner so the widget doesn't cover editor/chat input
+  // areas (e.g. the Copilot prompt box) that typically sit along the bottom.
+  win.setPosition(workArea.x + workArea.width - w - 16, workArea.y + 16);
 }
 
 function setWindowMode(mode: WindowMode): void {
@@ -43,7 +45,10 @@ function createWindow(): void {
     height: SIZES[windowMode].h,
     show: false,
     frame: false,
-    transparent: true,
+    // Transparent frameless windows fail to paint on many Windows GPU setups
+    // (window exists but is invisible). A solid background renders reliably.
+    transparent: false,
+    backgroundColor: '#0f1722',
     resizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -55,14 +60,16 @@ function createWindow(): void {
     },
   });
 
-  win.setAlwaysOnTop(true, 'screen-saver');
+  win.setAlwaysOnTop(true, 'floating');
   positionWindow();
 
   const devUrl = process.env['ELECTRON_RENDERER_URL'];
   if (devUrl) void win.loadURL(devUrl);
   else void win.loadFile(join(__dirname, '../renderer/index.html'));
 
-  win.once('ready-to-show', () => win?.show());
+  // showInactive keeps keyboard focus in the editor so the widget never
+  // interrupts typing in VS Code / the Copilot prompt box.
+  win.once('ready-to-show', () => win?.showInactive());
   win.on('closed', () => {
     win = null;
   });
