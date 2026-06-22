@@ -1,0 +1,15 @@
+{
+  "name": "@ecoprompt/scoring-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Heuristic waste detectors, efficiency scoring, and the pet state machine.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ecoprompt/shared-types": "*"
+  }
+}

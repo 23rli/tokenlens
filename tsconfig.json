@@ -1,0 +1,10 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/shared-types" },
+    { "path": "packages/scoring-engine" },
+    { "path": "packages/ingestion" },
+    { "path": "packages/llm-adapters" },
+    { "path": "apps/api" }
+  ]
+}

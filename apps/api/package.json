@@ -1,0 +1,25 @@
+{
+  "name": "@ecoprompt/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EcoPrompt Guardians backend — Azure Functions (scorePrompt, generateTip, sessionSummary, health) with a local Node server.",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean",
+    "start": "node dist/src/server.js",
+    "start:func": "func start",
+    "dev": "tsx watch src/server.ts"
+  },
+  "dependencies": {
+    "@azure/data-tables": "^13.3.1",
+    "@azure/functions": "^4.7.0",
+    "@ecoprompt/llm-adapters": "*",
+    "@ecoprompt/scoring-engine": "*",
+    "@ecoprompt/shared-types": "*",
+    "applicationinsights": "^3.5.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

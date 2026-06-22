@@ -1,0 +1,16 @@
+{
+  "name": "@ecoprompt/llm-adapters",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Deterministic heuristic coach + optional Azure OpenAI / Foundry / OpenAI coach.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "clean": "tsc --build --clean"
+  },
+  "dependencies": {
+    "@ecoprompt/shared-types": "*",
+    "@ecoprompt/scoring-engine": "*"
+  }
+}

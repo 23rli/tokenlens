@@ -1,0 +1,42 @@
+{
+  "name": "eco-prompt-guardians",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EcoPrompt Guardians — a desktop AI-efficiency companion that scores prompt waste and visualizes ecosystem health.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/shared-types",
+    "packages/scoring-engine",
+    "packages/ingestion",
+    "packages/llm-adapters",
+    "apps/api",
+    "apps/desktop-widget"
+  ],
+  "scripts": {
+    "build": "tsc --build",
+    "build:clean": "tsc --build --clean",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "api:start": "npm run start --workspace @ecoprompt/api",
+    "widget:dev": "npm run dev --workspace @ecoprompt/desktop-widget",
+    "widget:build": "npm run build --workspace @ecoprompt/desktop-widget",
+    "widget:typecheck": "npm run typecheck --workspace @ecoprompt/desktop-widget",
+    "demo": "node scripts/demo.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.18.2",
+    "vitest": "^2.1.8"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

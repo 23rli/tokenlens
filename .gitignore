@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+build/
+release/
+*.tsbuildinfo
+.vite/
+
+# Test / coverage
+coverage/
+
+# Local config & secrets
+.env
+.env.local
+.env.*.local
+local.settings.json
+apps/api/local.settings.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
