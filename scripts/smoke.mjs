@@ -46,6 +46,14 @@ const vscodeMock = {
   },
   window: {
     activeTextEditor: undefined,
+    createOutputChannel: () => ({
+      appendLine() {},
+      append() {},
+      clear() {},
+      show() {},
+      hide() {},
+      dispose() {},
+    }),
     createStatusBarItem: () => {
       statusItem = { text: '', tooltip: '', command: '', show() {}, hide() {}, dispose() {} };
       return statusItem;

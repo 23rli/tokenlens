@@ -4,12 +4,17 @@ import { parseTranscript } from '../transcriptParser';
 const line = (obj: unknown): string => JSON.stringify(obj);
 
 describe('parseTranscript', () => {
-  it('extracts session id, response text, and tool calls per turn', () => {
+  it('extracts the user prompt, response text, and tool calls per turn', () => {
     const content = [
       line({
         type: 'session.start',
         data: { sessionId: 'sess-1' },
         timestamp: '2026-06-22T01:00:00.000Z',
+      }),
+      line({
+        type: 'user.message',
+        data: { content: 'Refactor the parser' },
+        timestamp: '2026-06-22T01:00:00.500Z',
       }),
       line({
         type: 'assistant.turn_start',
@@ -50,6 +55,7 @@ describe('parseTranscript', () => {
     expect(parsed.sessionId).toBe('sess-1');
     expect(parsed.turns).toHaveLength(1);
     const turn = parsed.turns[0]!;
+    expect(turn.promptText).toBe('Refactor the parser');
     expect(turn.responseText).toContain('Hello');
     expect(turn.responseText).toContain('World');
     expect(turn.toolCalls).toHaveLength(1);
@@ -58,19 +64,19 @@ describe('parseTranscript', () => {
     expect(turn.toolCalls[0]!.durationMs).toBe(500);
   });
 
-  it('separates multiple turns and ignores malformed lines', () => {
+  it('separates turns by user message and ignores malformed lines', () => {
     const content = [
-      line({ type: 'assistant.turn_start', data: { turnId: '0' } }),
+      line({ type: 'user.message', data: { content: 'first' } }),
       line({ type: 'assistant.message', data: { content: 'a' } }),
-      line({ type: 'assistant.turn_end', data: { turnId: '0' } }),
       'this is not json',
-      line({ type: 'assistant.turn_start', data: { turnId: '1' } }),
+      line({ type: 'user.message', data: { content: 'second' } }),
       line({ type: 'assistant.message', data: { content: 'b' } }),
-      line({ type: 'assistant.turn_end', data: { turnId: '1' } }),
     ].join('\n');
 
     const parsed = parseTranscript(content);
     expect(parsed.turns).toHaveLength(2);
+    expect(parsed.turns[0]!.promptText).toBe('first');
+    expect(parsed.turns[1]!.promptText).toBe('second');
     expect(parsed.turns[1]!.responseText).toBe('b');
   });
 });

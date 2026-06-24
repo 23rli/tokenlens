@@ -19,6 +19,7 @@ export class ScoreService {
   constructor(
     private readonly store: GuardianStore,
     private readonly getCoachConfig: () => Promise<CoachConfig>,
+    private readonly log?: (message: string) => void,
   ) {}
 
   private tracker(sessionId: string): SessionTracker {
@@ -55,6 +56,11 @@ export class ScoreService {
       promptText: event.promptText,
       tip,
     });
+    this.log?.(
+      `scored (${source}): overall ${Math.round(resp.overallScore)} · waste ${Math.round(
+        resp.wasteScore,
+      )}`,
+    );
     return resp.overallScore;
   }
 

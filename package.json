@@ -14,7 +14,7 @@
     "url": "https://github.com/your-org/ecoprompt-guardians/issues"
   },
   "engines": {
-    "vscode": "^1.84.0"
+    "vscode": "^1.90.0"
   },
   "categories": [
     "Visualization",
@@ -97,6 +97,15 @@
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "ecoprompt.guardian",
+        "name": "ecoprompt",
+        "fullName": "EcoPrompt Guardian",
+        "description": "Score a prompt's efficiency and suggest a leaner version",
+        "isSticky": false
+      }
+    ],
     "configuration": {
       "title": "EcoPrompt Guardians",
       "properties": {
@@ -152,7 +161,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
-    "@types/vscode": "^1.84.0",
+    "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.2.1",
     "esbuild": "^0.24.2",
     "typescript": "^5.7.2",

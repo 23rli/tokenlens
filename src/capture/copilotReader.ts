@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import type { PromptEvent } from '@ecoprompt/shared-types';
 import { parseTranscript } from './parsers/transcriptParser';
-import { parseChatSession } from './parsers/chatSessionParser';
 import { buildPromptEvent } from './parsers/promptEventFactory';
 import type { CopilotSessionPaths } from './copilotPaths';
 
@@ -15,56 +14,33 @@ function safeRead(path: string | undefined): string {
 }
 
 /**
- * Read one Copilot session from disk and merge the two on-disk sources into
- * per-turn PromptEvents: user prompt + model + output tokens (chatSession)
- * enriched with assistant response + tool calls + timing (transcript).
+ * Read one Copilot session from its append-only transcript and produce one
+ * PromptEvent per user turn: the user prompt, the assistant's aggregated
+ * response, and tool calls. Token/cost are estimated by the event factory.
+ *
+ * The transcript is the single source of truth because the companion
+ * `chatSessions/*.jsonl` patch-log format is version-volatile and unreliable.
  */
 export function readSessionEvents(paths: CopilotSessionPaths, userId = 'local-user'): PromptEvent[] {
-  const parsedChat = parseChatSession(safeRead(paths.chatSessionPath));
-  const parsedTranscript = parseTranscript(safeRead(paths.transcriptPath));
-  const sessionId = parsedChat.sessionId || parsedTranscript.sessionId || paths.sessionId;
+  const parsed = parseTranscript(safeRead(paths.transcriptPath));
+  const sessionId = parsed.sessionId || paths.sessionId;
 
-  const byTurn = new Map<number, PromptEvent>();
-
-  for (const r of parsedChat.requests) {
-    byTurn.set(
-      r.turnIndex,
+  const events: PromptEvent[] = [];
+  for (const turn of parsed.turns) {
+    const promptText = (turn.promptText ?? '').trim();
+    if (!promptText) continue;
+    events.push(
       buildPromptEvent({
-        source: 'chat-session',
+        source: 'transcript',
         sessionId,
         userId,
-        turnIndex: r.turnIndex,
-        promptText: r.promptText,
-        model: parsedChat.model,
-        outputTokensOverride: r.completionTokens,
+        turnIndex: turn.turnIndex,
+        promptText: turn.promptText ?? '',
+        responseText: turn.responseText || undefined,
+        toolCalls: turn.toolCalls,
+        timestamp: turn.startTime,
       }),
     );
   }
-
-  for (const t of parsedTranscript.turns) {
-    const existing = byTurn.get(t.turnIndex);
-    if (existing) {
-      if (t.responseText) existing.responseText = t.responseText;
-      if (t.toolCalls.length) existing.toolCalls = t.toolCalls;
-      existing.source = 'transcript';
-      if (t.startTime) existing.timestamp = t.startTime;
-    } else if (t.responseText || t.toolCalls.length) {
-      byTurn.set(
-        t.turnIndex,
-        buildPromptEvent({
-          source: 'transcript',
-          sessionId,
-          userId,
-          turnIndex: t.turnIndex,
-          promptText: '',
-          responseText: t.responseText,
-          toolCalls: t.toolCalls,
-          model: parsedChat.model,
-          timestamp: t.startTime,
-        }),
-      );
-    }
-  }
-
-  return [...byTurn.values()].sort((a, b) => a.turnIndex - b.turnIndex);
+  return events;
 }

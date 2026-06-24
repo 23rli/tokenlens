@@ -11,6 +11,12 @@ const SECRET_KEY = 'ecoprompt.llmApiKey';
 export function activate(context: vscode.ExtensionContext): void {
   const store = new GuardianStore(context);
 
+  const output = vscode.window.createOutputChannel('EcoPrompt Guardians');
+  context.subscriptions.push(output);
+  const log = (message: string): void =>
+    output.appendLine(`[${new Date().toLocaleTimeString()}] ${message}`);
+  log('EcoPrompt Guardians activated.');
+
   const getCoachConfig = async (): Promise<CoachConfig> => {
     const cfg = vscode.workspace.getConfiguration('ecoprompt.coaching');
     const apiKey = await context.secrets.get(SECRET_KEY);
@@ -24,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
     };
   };
 
-  const scoreService = new ScoreService(store, getCoachConfig);
+  const scoreService = new ScoreService(store, getCoachConfig, log);
 
   const statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
@@ -34,9 +40,21 @@ export function activate(context: vscode.ExtensionContext): void {
   let watcher: CopilotWatcher | undefined;
   const startWatcher = (): void => {
     if (watcher) return;
-    watcher = new CopilotWatcher((event) => void scoreService.scoreEvent(event, 'copilot'));
+    watcher = new CopilotWatcher((event) => {
+      log(
+        `capture: turn ${event.turnIndex} — "${event.promptText
+          .slice(0, 60)
+          .replace(/\s+/g, ' ')}…"`,
+      );
+      void scoreService.scoreEvent(event, 'copilot');
+    });
     watcher.start();
     context.subscriptions.push(watcher);
+    log(
+      watcher.isAvailable()
+        ? 'Passive capture started — watching Copilot chat sessions on disk.'
+        : 'Passive capture started, but no Copilot chat sessions were found yet.',
+    );
   };
   const stopWatcher = (): void => {
     watcher?.dispose();
@@ -75,11 +93,68 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ecoprompt.setLlmApiKey', () => setLlmApiKey(context)),
   );
 
+  registerChatParticipant(context, scoreService, store, log);
+
   if (store.captureEnabled) startWatcher();
 }
 
 export function deactivate(): void {
   /* disposables are cleaned up via context.subscriptions */
+}
+
+function registerChatParticipant(
+  context: vscode.ExtensionContext,
+  scoreService: ScoreService,
+  store: GuardianStore,
+  log: (message: string) => void,
+): void {
+  if (!vscode.chat?.createChatParticipant) {
+    log('Chat participant API unavailable in this VS Code version.');
+    return;
+  }
+  try {
+    const participant = vscode.chat.createChatParticipant(
+      'ecoprompt.guardian',
+      async (request, _chatContext, response) => {
+        const text = request.prompt?.trim();
+        if (!text) {
+          response.markdown('Type a prompt after `@ecoprompt` and I’ll score its efficiency.');
+          return;
+        }
+        const score = await scoreService.scoreManualText(text);
+        const state = store.getState();
+        const ev = state.lastEvent;
+        response.markdown(
+          `**EcoPrompt score: ${Math.round(score)}/100**  ·  waste ${Math.round(
+            ev?.wasteScore ?? 0,
+          )}  ·  ecosystem _${state.world}_\n\n`,
+        );
+        const top = (ev?.wasteBreakdown ?? [])
+          .filter((c) => c.severity > 0.05)
+          .sort((a, b) => b.weightedPoints - a.weightedPoints)
+          .slice(0, 3);
+        if (top.length > 0) {
+          response.markdown(
+            top.map((c) => `- **${c.category}** — ${c.reason}`).join('\n') + '\n\n',
+          );
+        }
+        if (state.tip) {
+          response.markdown(`💡 ${state.tip.message}\n`);
+          if (state.tip.rewrittenPrompt) {
+            response.markdown(
+              `\n**Leaner rewrite:**\n\n\`\`\`\n${state.tip.rewrittenPrompt}\n\`\`\``,
+            );
+          }
+        }
+        log(`@ecoprompt scored a prompt → ${Math.round(score)}/100`);
+      },
+    );
+    participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
+    context.subscriptions.push(participant);
+    log('Chat participant @ecoprompt registered.');
+  } catch (err) {
+    log(`Failed to register chat participant: ${String(err)}`);
+  }
 }
 
 async function scoreManualPrompt(scoreService: ScoreService): Promise<void> {

@@ -1,4 +1,3 @@
-import type { ToolCallInfo } from '@ecoprompt/shared-types';
 import type { ParsedTranscript, ParsedTurn } from './types';
 
 interface Envelope {
@@ -10,24 +9,24 @@ interface Envelope {
 }
 
 /**
- * Parse a Copilot `transcripts/<id>.jsonl` event stream into per-turn data:
- * assistant response text, tool calls (with success + duration), and turn
- * boundaries. Schema confirmed against real transcripts (design research).
+ * Parse a Copilot `transcripts/<id>.jsonl` append-only event stream into
+ * per-user-turn data: the user's prompt (`user.message`), the assistant's
+ * aggregated response, and tool calls (with success + duration). One user
+ * prompt can drive many assistant sub-turns; they are merged into that turn.
  */
 export function parseTranscript(content: string): ParsedTranscript {
   const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
   let sessionId = '';
-  let currentTurn = 0;
-  const turnsMap = new Map<number, ParsedTurn>();
+  const turns: ParsedTurn[] = [];
   const toolStart = new Map<string, { name: string; ts?: string }>();
+  let current: ParsedTurn | undefined;
 
-  const getTurn = (i: number): ParsedTurn => {
-    let t = turnsMap.get(i);
-    if (!t) {
-      t = { turnIndex: i, responseText: '', toolCalls: [] };
-      turnsMap.set(i, t);
+  const ensureTurn = (ts?: string): ParsedTurn => {
+    if (!current) {
+      current = { turnIndex: turns.length, responseText: '', toolCalls: [], startTime: ts };
+      turns.push(current);
     }
-    return t;
+    return current;
   };
 
   for (const line of lines) {
@@ -42,19 +41,29 @@ export function parseTranscript(content: string): ParsedTranscript {
       case 'session.start':
         sessionId = typeof d.sessionId === 'string' ? d.sessionId : sessionId;
         break;
+      case 'user.message': {
+        // A new user prompt always starts a new turn.
+        current = {
+          turnIndex: turns.length,
+          promptText: typeof d.content === 'string' ? d.content : '',
+          responseText: '',
+          toolCalls: [],
+          startTime: ev.timestamp,
+        };
+        turns.push(current);
+        break;
+      }
       case 'assistant.turn_start': {
-        const n = Number.parseInt(String(d.turnId), 10);
-        if (Number.isFinite(n)) currentTurn = n;
-        const t = getTurn(currentTurn);
+        const t = ensureTurn(ev.timestamp);
         if (!t.startTime) t.startTime = ev.timestamp;
         break;
       }
       case 'assistant.turn_end': {
-        getTurn(currentTurn).endTime = ev.timestamp;
+        if (current) current.endTime = ev.timestamp;
         break;
       }
       case 'assistant.message': {
-        const t = getTurn(currentTurn);
+        const t = ensureTurn(ev.timestamp);
         if (typeof d.content === 'string' && d.content.length > 0) {
           t.responseText += (t.responseText ? '\n' : '') + d.content;
         }
@@ -73,19 +82,18 @@ export function parseTranscript(content: string): ParsedTranscript {
         break;
       }
       case 'tool.execution_complete': {
-        const t = getTurn(currentTurn);
+        const t = ensureTurn(ev.timestamp);
         const started = d.toolCallId ? toolStart.get(d.toolCallId) : undefined;
         const durationMs =
           started?.ts && ev.timestamp
             ? Math.max(0, Date.parse(ev.timestamp) - Date.parse(started.ts))
             : undefined;
-        const call: ToolCallInfo = {
+        t.toolCalls.push({
           toolName: started?.name ?? d.toolName ?? 'unknown',
           toolCallId: d.toolCallId,
           success: typeof d.success === 'boolean' ? d.success : undefined,
           durationMs,
-        };
-        t.toolCalls.push(call);
+        });
         break;
       }
       default:
@@ -93,6 +101,5 @@ export function parseTranscript(content: string): ParsedTranscript {
     }
   }
 
-  const turns = [...turnsMap.values()].sort((a, b) => a.turnIndex - b.turnIndex);
   return { sessionId, turns };
 }

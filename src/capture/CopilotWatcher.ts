@@ -4,19 +4,21 @@ import { findActiveSession, getWorkspaceStorageRoot, listCopilotSessions } from 
 import { readSessionEvents } from './copilotReader';
 
 /**
- * Best-effort, read-only live capture of GitHub Copilot Chat. Watches the
- * on-disk transcript + chatSession `.jsonl` files (under VS Code's per-workspace
- * storage) and emits a PromptEvent for each newly completed turn.
+ * Best-effort, read-only live capture of GitHub Copilot Chat. Reads the
+ * append-only transcript `.jsonl` files under VS Code's per-workspace storage
+ * and emits a PromptEvent for each newly completed user turn.
  *
- * The session files are undocumented, so every step degrades gracefully — if
- * the layout changes or nothing is found, capture simply goes quiet and the
- * manual "Score this prompt" command still works.
+ * Watching files outside the workspace can be unreliable, so a lightweight
+ * mtime-guarded poll backs up the file-system watcher. Everything degrades
+ * gracefully — if nothing is found, the manual command still works.
  */
 export class CopilotWatcher implements vscode.Disposable {
   private watcher?: vscode.FileSystemWatcher;
   private readonly seen = new Set<string>();
   private readonly root = getWorkspaceStorageRoot();
-  private timer?: ReturnType<typeof setTimeout>;
+  private debounce?: ReturnType<typeof setTimeout>;
+  private poll?: ReturnType<typeof setInterval>;
+  private lastMtime = 0;
 
   constructor(private readonly onEvent: (event: PromptEvent) => void) {}
 
@@ -29,13 +31,14 @@ export class CopilotWatcher implements vscode.Disposable {
   }
 
   start(): void {
-    // Mark existing turns as already seen so only NEW turns emit (live-only).
+    // Mark every existing turn across all sessions as seen, so only turns that
+    // happen AFTER capture starts are emitted (no history replay).
     try {
-      const active = findActiveSession(this.root);
-      if (active) {
-        for (const ev of readSessionEvents(active)) {
+      for (const session of listCopilotSessions(this.root)) {
+        for (const ev of readSessionEvents(session)) {
           this.seen.add(`${ev.sessionId}:${ev.turnIndex}`);
         }
+        this.lastMtime = Math.max(this.lastMtime, session.modifiedMs);
       }
     } catch {
       /* ignore */
@@ -48,13 +51,15 @@ export class CopilotWatcher implements vscode.Disposable {
       this.watcher.onDidCreate(onChange);
       this.watcher.onDidChange(onChange);
     } catch {
-      /* watcher unavailable — capture stays quiet */
+      /* watcher unavailable — polling still covers us */
     }
+
+    this.poll = setInterval(() => this.refresh(), 4000);
   }
 
   private scheduleRefresh(): void {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.refresh(), 450);
+    if (this.debounce) clearTimeout(this.debounce);
+    this.debounce = setTimeout(() => this.refresh(), 400);
   }
 
   private refresh(): void {
@@ -64,7 +69,8 @@ export class CopilotWatcher implements vscode.Disposable {
     } catch {
       return;
     }
-    if (!active) return;
+    if (!active || active.modifiedMs <= this.lastMtime) return;
+    this.lastMtime = active.modifiedMs;
 
     for (const ev of readSessionEvents(active)) {
       if (!ev.promptText.trim()) continue;
@@ -76,7 +82,8 @@ export class CopilotWatcher implements vscode.Disposable {
   }
 
   dispose(): void {
-    if (this.timer) clearTimeout(this.timer);
+    if (this.debounce) clearTimeout(this.debounce);
+    if (this.poll) clearInterval(this.poll);
     this.watcher?.dispose();
   }
 }

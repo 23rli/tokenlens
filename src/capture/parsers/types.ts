@@ -16,9 +16,11 @@ export interface IngestionAdapter {
   onPromptEvent(handler: PromptEventHandler): () => void;
 }
 
-/** A reconstructed assistant turn from a transcript JSONL. */
+/** A reconstructed user turn from a transcript JSONL (prompt + response + tools). */
 export interface ParsedTurn {
   turnIndex: number;
+  /** The user's prompt for this turn, from a `user.message` event. */
+  promptText?: string;
   responseText: string;
   toolCalls: ToolCallInfo[];
   startTime?: string;
