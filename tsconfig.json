@@ -1,10 +1,25 @@
 {
-  "files": [],
-  "references": [
-    { "path": "packages/shared-types" },
-    { "path": "packages/scoring-engine" },
-    { "path": "packages/ingestion" },
-    { "path": "packages/llm-adapters" },
-    { "path": "apps/api" }
-  ]
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "preact",
+    "strict": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "types": ["node", "vscode"],
+    "paths": {
+      "@ecoprompt/shared-types": ["./src/types/index.ts"],
+      "@ecoprompt/scoring-engine": ["./src/scoring/index.ts"],
+      "@ecoprompt/llm-adapters": ["./src/coaching/index.ts"],
+      "@ecoprompt/ingestion": ["./src/capture/parsers/index.ts"]
+    }
+  },
+  "include": ["src", "webview-ui/src"]
 }

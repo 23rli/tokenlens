@@ -19,24 +19,18 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        env:
-          # Skip the Electron binary download in CI (the desktop app isn't run here).
-          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
-      - name: Build packages + API (tsc)
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build (esbuild)
         run: npm run build
-
-      - name: Build desktop widget (electron-vite)
-        run: npm run widget:build
-
-      - name: Typecheck desktop widget (tsc --noEmit)
-        run: npm run widget:typecheck
 
       - name: Test
         run: npm test
 
-      - name: Lint
-        run: npm run lint
+      - name: Smoke test
+        run: node scripts/smoke.mjs
 
-      - name: Format check
-        run: npm run format:check
+      - name: Package (.vsix)
+        run: npx --yes @vscode/vsce package --no-dependencies

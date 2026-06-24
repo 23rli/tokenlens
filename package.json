@@ -1,42 +1,161 @@
 {
-  "name": "eco-prompt-guardians",
+  "name": "ecoprompt-guardians",
+  "displayName": "EcoPrompt Guardians",
+  "description": "An AI-efficiency companion that scores prompt waste, coaches better prompts, and grows a tamagotchi ecosystem that thrives when you prompt efficiently.",
   "version": "0.1.0",
-  "private": true,
-  "description": "EcoPrompt Guardians — a desktop AI-efficiency companion that scores prompt waste and visualizes ecosystem health.",
+  "publisher": "ecoprompt",
   "license": "MIT",
-  "workspaces": [
-    "packages/shared-types",
-    "packages/scoring-engine",
-    "packages/ingestion",
-    "packages/llm-adapters",
-    "apps/api",
-    "apps/desktop-widget"
-  ],
-  "scripts": {
-    "build": "tsc --build",
-    "build:clean": "tsc --build --clean",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "coverage": "vitest run --coverage",
-    "lint": "eslint .",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "api:start": "npm run start --workspace @ecoprompt/api",
-    "widget:dev": "npm run dev --workspace @ecoprompt/desktop-widget",
-    "widget:build": "npm run build --workspace @ecoprompt/desktop-widget",
-    "widget:typecheck": "npm run typecheck --workspace @ecoprompt/desktop-widget",
-    "demo": "node scripts/demo.mjs"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/ecoprompt-guardians.git"
   },
-  "devDependencies": {
-    "@eslint/js": "^9.17.0",
-    "@types/node": "^22.10.2",
-    "eslint": "^9.17.0",
-    "prettier": "^3.4.2",
-    "typescript": "^5.7.2",
-    "typescript-eslint": "^8.18.2",
-    "vitest": "^2.1.8"
+  "homepage": "https://github.com/your-org/ecoprompt-guardians#readme",
+  "bugs": {
+    "url": "https://github.com/your-org/ecoprompt-guardians/issues"
   },
   "engines": {
-    "node": ">=20"
+    "vscode": "^1.84.0"
+  },
+  "categories": [
+    "Visualization",
+    "Education",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "copilot",
+    "tokens",
+    "sustainability",
+    "prompt",
+    "efficiency",
+    "coaching"
+  ],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ecoprompt-guardians",
+          "title": "EcoPrompt Guardians",
+          "icon": "media/guardian-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ecoprompt-guardians": [
+        {
+          "type": "webview",
+          "id": "ecoprompt.dashboard",
+          "name": "Guardian"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "ecoprompt.scorePrompt",
+        "title": "Score this prompt",
+        "category": "EcoPrompt",
+        "icon": "$(beaker)"
+      },
+      {
+        "command": "ecoprompt.openDashboard",
+        "title": "Open Guardian dashboard",
+        "category": "EcoPrompt"
+      },
+      {
+        "command": "ecoprompt.toggleCapture",
+        "title": "Toggle passive capture",
+        "category": "EcoPrompt"
+      },
+      {
+        "command": "ecoprompt.resetEcosystem",
+        "title": "Reset ecosystem",
+        "category": "EcoPrompt",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "ecoprompt.setLlmApiKey",
+        "title": "Set coaching LLM API key",
+        "category": "EcoPrompt"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "ecoprompt.scorePrompt",
+          "when": "view == ecoprompt.dashboard",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ecoprompt.resetEcosystem",
+          "when": "view == ecoprompt.dashboard",
+          "group": "navigation@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "EcoPrompt Guardians",
+      "properties": {
+        "ecoprompt.passiveCapture.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Passively read VS Code Copilot chat sessions to score prompts automatically. Experimental and read-only."
+        },
+        "ecoprompt.coaching.llmProvider": {
+          "type": "string",
+          "enum": [
+            "none",
+            "openai",
+            "azure-openai"
+          ],
+          "default": "none",
+          "description": "LLM provider for coaching tips. 'none' uses the offline heuristic coach."
+        },
+        "ecoprompt.coaching.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "LLM endpoint URL (for openai / azure-openai)."
+        },
+        "ecoprompt.coaching.model": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "Model or deployment name used for coaching."
+        },
+        "ecoprompt.sustainability.whPerThousandTokens": {
+          "type": "number",
+          "default": 0.4,
+          "description": "Estimated watt-hours consumed per 1,000 tokens, used for the sustainability estimate."
+        },
+        "ecoprompt.sustainability.gridGramsCo2PerKwh": {
+          "type": "number",
+          "default": 400,
+          "description": "Grid carbon intensity (gCO2e per kWh) for the sustainability estimate."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "node esbuild.mjs --production",
+    "vsce:package": "vsce package",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "preact": "^10.25.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.84.0",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   }
 }

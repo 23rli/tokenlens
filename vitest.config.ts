@@ -1,25 +1,20 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
 
-const pkg = (name) => resolve(__dirname, `packages/${name}/src/index.ts`);
+const r = (p) => resolve(__dirname, p);
 
 export default defineConfig({
   resolve: {
     alias: {
-      '@ecoprompt/shared-types': pkg('shared-types'),
-      '@ecoprompt/scoring-engine': pkg('scoring-engine'),
-      '@ecoprompt/ingestion': pkg('ingestion'),
-      '@ecoprompt/llm-adapters': pkg('llm-adapters'),
+      '@ecoprompt/shared-types': r('src/types/index.ts'),
+      '@ecoprompt/scoring-engine': r('src/scoring/index.ts'),
+      '@ecoprompt/llm-adapters': r('src/coaching/index.ts'),
+      '@ecoprompt/ingestion': r('src/capture/parsers/index.ts'),
     },
   },
   test: {
     globals: true,
     environment: 'node',
-    include: ['packages/**/*.test.ts', 'apps/**/*.test.ts'],
-    coverage: {
-      provider: 'v8',
-      include: ['packages/**/src/**/*.ts'],
-      exclude: ['**/*.test.ts', '**/index.ts'],
-    },
+    include: ['src/**/*.test.ts'],
   },
 });

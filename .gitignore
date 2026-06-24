@@ -7,6 +7,7 @@ out/
 build/
 release/
 *.tsbuildinfo
+*.vsix
 .vite/
 
 # Test / coverage
@@ -17,7 +18,6 @@ coverage/
 .env.local
 .env.*.local
 local.settings.json
-apps/api/local.settings.json
 
 # Logs
 *.log
