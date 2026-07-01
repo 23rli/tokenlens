@@ -24,6 +24,8 @@ export interface ScoredEventView {
   improvements: string[];
   timestamp: string;
   source: 'manual' | 'copilot';
+  /** Per-prompt efficiency (0..100): waste scaled by cost/carbon intensity. */
+  efficiency?: number;
 }
 
 /** A coaching tip shown to the user. */
@@ -31,6 +33,12 @@ export interface TipView {
   message: string;
   rewrittenPrompt?: string;
   category?: string;
+  /** Estimated % fewer tokens the rewrite would use. */
+  estimatedTokenReductionPct?: number;
+  /** Estimated % lower latency the rewrite would yield. */
+  estimatedLatencyReductionPct?: number;
+  /** Estimated absolute tokens saved by the rewrite for this prompt. */
+  estimatedTokensSaved?: number;
 }
 
 /** A point on the session score trend line. */
@@ -79,6 +87,10 @@ export interface SuccessMetrics {
 /** Full snapshot of pet state pushed to the webview. */
 export interface TamaState {
   world: PetWorldState;
+  /** Current session health (0..100) that drives the pet world. */
+  health: number;
+  /** True while the shown score is a preliminary preview (tokens not finalized). */
+  preliminary?: boolean;
   overallScore: number;
   wasteScore: number;
   subscores: Subscores;

@@ -11,8 +11,11 @@ export function LiveData({ state }: { state: TamaState }) {
   const e = state.lastEvent;
   const metrics = state.metrics;
   const efforts = m?.reasoningEfforts ?? [];
+  // Prefer the effort the session ACTUALLY selected; fall back to the model's
+  // supported range only when the concrete choice isn't recorded.
   const reasoning =
-    efforts.length > 1 ? `${efforts[0]}–${efforts[efforts.length - 1]}` : efforts[0];
+    m?.reasoningEffort ??
+    (efforts.length > 1 ? `${efforts[0]}\u2013${efforts[efforts.length - 1]}` : efforts[0]);
 
   const agent = m ? [m.name ?? m.id, m.category].filter(Boolean).join(' · ') : undefined;
   const reasoningLine = m

@@ -57,19 +57,21 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       return;
     }
-    watcher = new CopilotWatcher((event) => {
-      log(
-        `capture: turn ${event.turnIndex} — "${event.promptText
-          .slice(0, 60)
-          .replace(/\s+/g, ' ')}…"`,
-      );
-      if (!announcedCapture) {
-        announcedCapture = true;
-        void vscode.window.showInformationMessage(
-          'Tokentama is now auto-grading your Copilot prompts.',
+    watcher = new CopilotWatcher((event, meta) => {
+      if (!meta?.preliminary) {
+        log(
+          `capture: turn ${event.turnIndex} — "${event.promptText
+            .slice(0, 60)
+            .replace(/\s+/g, ' ')}…"`,
         );
+        if (!announcedCapture) {
+          announcedCapture = true;
+          void vscode.window.showInformationMessage(
+            'Tokentama is now auto-grading your Copilot prompts.',
+          );
+        }
       }
-      void scoreService.scoreEvent(event, 'copilot');
+      void scoreService.scoreEvent(event, 'copilot', { preliminary: meta?.preliminary });
     }, workspaceHash);
     watcher.start();
     context.subscriptions.push(watcher);

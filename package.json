@@ -186,6 +186,31 @@
           "type": "number",
           "default": 2,
           "description": "Estimated millilitres of water per 1,000 tokens, used for the headline environmental impact."
+        },
+        "tokentama.health.maxDamage": {
+          "type": "number",
+          "default": 22,
+          "description": "Max health a single fully-wasteful prompt removes at baseline intensity, before cost/carbon scaling."
+        },
+        "tokentama.health.healRate": {
+          "type": "number",
+          "default": 2,
+          "description": "Health restored by an efficient prompt. Kept small so healing stays well below damage."
+        },
+        "tokentama.health.healThreshold": {
+          "type": "number",
+          "default": 80,
+          "description": "Overall score at or above which a prompt heals the pet instead of damaging it."
+        },
+        "tokentama.health.baselineCostUsd": {
+          "type": "number",
+          "default": 0.01,
+          "description": "Cost (USD) treated as normal for one prompt; damage scales up as a prompt's cost/carbon exceeds this."
+        },
+        "tokentama.health.maxIntensity": {
+          "type": "number",
+          "default": 3,
+          "description": "Upper bound on the cost/carbon intensity multiplier that amplifies damage for expensive/heavy prompts."
         }
       }
     }

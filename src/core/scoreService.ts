@@ -125,24 +125,33 @@ export class ScoreService {
   }
 
   /** Score a captured Copilot turn. Returns the overall score. */
-  async scoreEvent(event: PromptEvent, source: 'manual' | 'copilot'): Promise<number> {
-    const request = this.tracker(event.sessionId).toScoreRequest(event);
+  async scoreEvent(
+    event: PromptEvent,
+    source: 'manual' | 'copilot',
+    opts: { preliminary?: boolean } = {},
+  ): Promise<number> {
+    const preliminary = opts.preliminary === true;
+    const request = this.tracker(event.sessionId).toScoreRequest(event, { record: !preliminary });
     const previousScore = this.store.latestOverall(event.sessionId);
     const resp = scorePrompt(request, { previousScore: previousScore ?? undefined });
 
-    const tip = await this.maybeCoach(event, resp);
-    this.store.recordScore(resp, {
+    // Skip coaching on the preliminary pass — the response may still be streaming,
+    // and the finalized pass will produce the authoritative tip.
+    const tip = preliminary ? undefined : await this.maybeCoach(event, resp);
+    const recordOpts = {
       sessionId: event.sessionId,
       source,
       promptText: event.promptText,
       tip,
       tokens: event.tokens,
       model: event.model,
-    });
+    };
+    if (preliminary) this.store.previewScore(resp, recordOpts);
+    else this.store.recordScore(resp, recordOpts);
     this.log?.(
-      `scored (${source}): overall ${Math.round(resp.overallScore)} · waste ${Math.round(
-        resp.wasteScore,
-      )}`,
+      `${preliminary ? 'preview' : 'scored'} (${source}): overall ${Math.round(
+        resp.overallScore,
+      )} · waste ${Math.round(resp.wasteScore)}`,
     );
     return resp.overallScore;
   }
@@ -226,10 +235,18 @@ export class ScoreService {
         },
         config,
       );
+      const pct = tip.estimatedSavings?.estimatedTokenReductionPct;
+      const inputTokens = event.tokens?.inputTokens;
       return {
         message: tip.shortTip,
         rewrittenPrompt: tip.rewrittenPrompt,
         category: categories[0],
+        estimatedTokenReductionPct: pct,
+        estimatedLatencyReductionPct: tip.estimatedSavings?.estimatedLatencyReductionPct,
+        estimatedTokensSaved:
+          pct != null && inputTokens != null
+            ? Math.round((inputTokens * pct) / 100)
+            : undefined,
       };
     } catch {
       // Coaching never breaks scoring.

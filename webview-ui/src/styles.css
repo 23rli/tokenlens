@@ -491,34 +491,94 @@ body {
 /* ---------- Score header ---------- */
 .scoreheader {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
   border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
   border-radius: 10px;
   background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
 }
 
-.score-main {
+/* ---------- Health: the prominent, top-of-header readout ---------- */
+.health-block {
   display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.health-head {
+  display: flex;
+  justify-content: space-between;
   align-items: baseline;
-  gap: 8px;
+}
+.health-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--vscode-descriptionForeground);
+}
+.health-value {
+  font-size: 52px;
+  font-weight: 800;
+  line-height: 1;
+}
+.health-value.health-high {
+  color: var(--vscode-charts-green, #3fb950);
+}
+.health-value.health-mid {
+  color: var(--vscode-charts-yellow, #d29922);
+}
+.health-value.health-low {
+  color: var(--vscode-charts-red, #f85149);
+}
+.health-bar {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+}
+.health-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.4s ease, background-color 0.4s ease;
+}
+.health-bar-fill.health-high {
+  background: var(--vscode-charts-green, #3fb950);
+}
+.health-bar-fill.health-mid {
+  background: var(--vscode-charts-yellow, #d29922);
+}
+.health-bar-fill.health-low {
+  background: var(--vscode-charts-red, #f85149);
 }
 
-.score-value {
-  font-size: 40px;
+/* ---------- Secondary metrics row (efficiency + waste + trend) ---------- */
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.score-metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.metric-num {
+  font-size: 22px;
   font-weight: 700;
   line-height: 1;
 }
-
-.score-label {
-  display: flex;
-  flex-direction: column;
-  font-size: 11px;
+.metric-num.metric-waste {
   color: var(--vscode-descriptionForeground);
+}
+.metric-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
 }
 
 .delta {
@@ -534,28 +594,40 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
-.score-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+.sparkline {
+  width: 120px;
+  height: 24px;
+  opacity: 0.85;
+  margin-left: auto;
   color: var(--vscode-charts-blue, #539bf5);
 }
 
-.score-waste {
+/* ---------- Preliminary "still calculating" note ---------- */
+.calc-note {
   display: flex;
+  align-items: center;
   gap: 6px;
-  align-items: baseline;
-  color: var(--vscode-foreground);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
 }
-.score-waste strong {
-  font-size: 16px;
+.calc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--vscode-charts-yellow, #d29922);
+  animation: calc-pulse 1s ease-in-out infinite;
 }
-
-.sparkline {
-  width: 120px;
-  height: 28px;
-  opacity: 0.85;
+@keyframes calc-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 /* ---------- Actions ---------- */
@@ -813,6 +885,13 @@ button.ghost:hover {
   padding: 6px 8px;
   display: flex;
   justify-content: flex-end;
+}
+.rewrite-savings {
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-charts-green, #4caf50);
 }
 
 /* ============================================================================

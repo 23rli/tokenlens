@@ -31,7 +31,11 @@ export function ModelCard({ model }: { model?: ModelInfo }) {
       <div class="modelcard-meta muted">
         {model.contextMaxTokens != null && <span>ctx {fmtNum(model.contextMaxTokens)}</span>}
         {model.maxOutputTokens != null && <span> · out {fmtNum(model.maxOutputTokens)}</span>}
-        {model.reasoningEfforts?.length ? <span> · reasoning {model.reasoningEfforts.join('/')}</span> : null}
+        {model.reasoningEffort ? (
+          <span> · reasoning {model.reasoningEffort}</span>
+        ) : model.reasoningEfforts?.length ? (
+          <span> · reasoning {model.reasoningEfforts.join('/')}</span>
+        ) : null}
       </div>
     </section>
   );

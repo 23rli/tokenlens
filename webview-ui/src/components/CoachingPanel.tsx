@@ -36,6 +36,14 @@ export function CoachingPanel({ tip, lastEvent }: Props) {
         <div class="rewrite">
           <div class="rewrite-head">Suggested rewrite</div>
           <pre class="rewrite-body">{tip.rewrittenPrompt}</pre>
+          {tip.estimatedTokenReductionPct != null && (
+            <p class="rewrite-savings">
+              Saves ~{Math.round(tip.estimatedTokenReductionPct)}% tokens
+              {tip.estimatedTokensSaved != null && ` (~${tip.estimatedTokensSaved} tokens)`}
+              {tip.estimatedLatencyReductionPct != null &&
+                ` \u00b7 ~${Math.round(tip.estimatedLatencyReductionPct)}% latency`}
+            </p>
+          )}
           <div class="rewrite-actions">
             <button
               class="primary"

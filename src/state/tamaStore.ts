@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { ScorePromptResponse, Subscores, TokenEstimate, ModelInfo } from '@tokentama/shared-types';
-import { scoreToState } from '@tokentama/scoring-engine';
+import { scoreToState, computeHealthUpdate, DEFAULT_HEALTH_CONFIG, type HealthModelConfig } from '@tokentama/scoring-engine';
 import type {
   TamaState,
   ScorePoint,
@@ -22,8 +22,12 @@ const FULL_SUBSCORES: Subscores = {
 };
 
 interface PersistShape {
-  /** Smoothed ecosystem health (EMA of overall score). */
+  /** Session health (0..100). Reset to full on each new session, then chipped away. */
   health: number;
+  /** The session whose prompts are currently draining `health`. */
+  currentSessionId?: string;
+  /** True while the visible score is a preliminary preview (real tokens not in yet). */
+  preliminary?: boolean;
   records: ScoredRecord[];
   history: ScorePoint[];
   counters: Counters;
@@ -43,14 +47,14 @@ export interface RecordScoreOptions {
   tokens?: TokenEstimate;
   /** The session's selected model + pricing, when known. */
   model?: ModelInfo;
-  /** Demo/testing override: set health directly instead of smoothing (EMA). */
+  /** Demo/testing override: set health directly instead of running the health model. */
   forceHealth?: number;
 }
 
 /**
  * Single source of truth for the Tokentama ecosystem state. Persists to globalState,
- * smooths health so the pet transitions gradually, and emits a full snapshot
- * for the webview + status bar on every change.
+ * runs the session health model so the pet drains/recovers with prompt efficiency,
+ * and emits a full snapshot for the webview + status bar on every change.
  */
 export class TamaStore {
   private readonly _onDidChange = new vscode.EventEmitter<TamaState>();
@@ -94,9 +98,13 @@ export class TamaStore {
   }
 
   recordScore(resp: ScorePromptResponse, opts: RecordScoreOptions): void {
-    const prev = this.data.health;
-    this.data.health =
-      opts.forceHealth !== undefined ? opts.forceHealth : prev * 0.6 + resp.overallScore * 0.4;
+    // Health is scoped to the current Copilot session: a new session gives the pet
+    // a fresh life (full health), then each prompt's efficiency chips away at it.
+    const sameSession = this.data.currentSessionId === opts.sessionId;
+    const prevHealth = sameSession ? this.data.health : 100;
+    const update = computeHealthUpdate(prevHealth, resp, this.healthConfig());
+    this.data.currentSessionId = opts.sessionId;
+    this.data.health = opts.forceHealth !== undefined ? opts.forceHealth : update.health;
 
     const tokens = opts.tokens ?? resp.tokens;
     const event: ScoredEventView = {
@@ -114,6 +122,7 @@ export class TamaStore {
       improvements: resp.improvements,
       timestamp: new Date().toISOString(),
       source: opts.source,
+      efficiency: Math.round(update.efficiency),
     };
 
     this.data.lastEvent = event;
@@ -121,6 +130,7 @@ export class TamaStore {
     this.data.tip = opts.tip;
     if (opts.model) this.data.model = opts.model;
     this.data.lastOverallBySession[opts.sessionId] = resp.overallScore;
+    this.data.preliminary = false;
 
     this.data.records.push({
       timestamp: event.timestamp,
@@ -151,10 +161,53 @@ export class TamaStore {
     this.data.counters.tipsApplied += 1;
     this.persist();
   }
+  /**
+   * Show a preliminary score for a turn whose real metered tokens haven't landed
+   * yet. Updates only the visible score/tip — health, history, records and retry
+   * context are left untouched so the authoritative recordScore() (run once the
+   * turn finalizes) is the single source that chips the pet's health.
+   */
+  previewScore(resp: ScorePromptResponse, opts: RecordScoreOptions): void {
+    const efficiency = computeHealthUpdate(this.data.health, resp, this.healthConfig()).efficiency;
+    const tokens = opts.tokens ?? resp.tokens;
+    this.data.lastEvent = {
+      promptPreview: opts.promptText.replace(/\s+/g, ' ').trim().slice(0, 180),
+      overallScore: resp.overallScore,
+      wasteScore: resp.wasteScore,
+      delta: resp.delta,
+      inputTokens: tokens?.inputTokens ?? 0,
+      outputTokens: tokens?.outputTokens ?? 0,
+      estimatedCostUsd: tokens?.estimatedCostUsd ?? 0,
+      copilotCredits: tokens?.copilotCredits,
+      tokensReal: false,
+      wasteBreakdown: resp.wasteBreakdown,
+      reasons: resp.reasons,
+      improvements: resp.improvements,
+      timestamp: new Date().toISOString(),
+      source: opts.source,
+      efficiency: Math.round(efficiency),
+    };
+    this.data.lastSubscores = resp.subscores;
+    this.data.tip = opts.tip;
+    if (opts.model) this.data.model = opts.model;
+    this.data.preliminary = true;
+    this.emit();
+  }
 
   reset(): void {
     this.data = TamaStore.empty();
     this.persist();
+  }
+
+  private healthConfig(): HealthModelConfig {
+    const cfg = vscode.workspace.getConfiguration('tokentama.health');
+    return {
+      maxDamage: cfg.get<number>('maxDamage', DEFAULT_HEALTH_CONFIG.maxDamage),
+      healRate: cfg.get<number>('healRate', DEFAULT_HEALTH_CONFIG.healRate),
+      healThreshold: cfg.get<number>('healThreshold', DEFAULT_HEALTH_CONFIG.healThreshold),
+      baselineCostUsd: cfg.get<number>('baselineCostUsd', DEFAULT_HEALTH_CONFIG.baselineCostUsd),
+      maxIntensity: cfg.get<number>('maxIntensity', DEFAULT_HEALTH_CONFIG.maxIntensity),
+    };
   }
 
   getState(): TamaState {
@@ -169,6 +222,7 @@ export class TamaStore {
 
     return {
       world: scoreToState(this.data.health),
+      health: Math.round(this.data.health),
       overallScore: this.data.lastEvent?.overallScore ?? Math.round(this.data.health),
       wasteScore: this.data.lastEvent?.wasteScore ?? 0,
       subscores: this.data.lastSubscores ?? FULL_SUBSCORES,
@@ -178,6 +232,7 @@ export class TamaStore {
       metrics,
       model: this.data.model,
       captureEnabled: this._captureEnabled,
+      preliminary: this.data.preliminary ?? false,
     };
   }
 

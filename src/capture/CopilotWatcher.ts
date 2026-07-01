@@ -27,7 +27,7 @@ export class CopilotWatcher implements vscode.Disposable {
   private lastMtime = 0;
 
   constructor(
-    private readonly onEvent: (event: PromptEvent) => void,
+    private readonly onEvent: (event: PromptEvent, meta?: { preliminary?: boolean }) => void,
     private readonly onlyHash?: string,
   ) {}
 
@@ -96,14 +96,21 @@ export class CopilotWatcher implements vscode.Disposable {
       // after a short grace so the prompt always appears promptly.
       const hasRealTokens = !(ev.tokens && ev.tokens.estimated);
       if (!hasRealTokens) {
-        const since = this.pendingSince.get(key) ?? now;
-        this.pendingSince.set(key, since);
+        const since = this.pendingSince.get(key);
+        if (since === undefined) {
+          // First sight without final tokens: show a preliminary score immediately,
+          // then keep waiting for the real metered tokens to finalize it.
+          this.pendingSince.set(key, now);
+          this.onEvent(ev, { preliminary: true });
+          continue;
+        }
         if (now - since < 3000) continue;
+        // Grace expired — fall through and finalize with estimated tokens.
       }
 
       this.seen.add(key);
       this.pendingSince.delete(key);
-      this.onEvent(ev);
+      this.onEvent(ev, { preliminary: false });
     }
   }
 

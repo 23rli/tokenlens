@@ -20,25 +20,37 @@ export function ScoreHeader({ state }: { state: TamaState }) {
   const delta = state.lastEvent?.delta ?? 0;
   const trend = state.history.map((h) => h.overallScore);
   const deltaClass = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+  const health = Math.max(0, Math.min(100, Math.round(state.health)));
+  const healthClass = health >= 60 ? 'high' : health >= 30 ? 'mid' : 'low';
+  const preliminary = state.preliminary === true;
 
   return (
     <div class="scoreheader">
-      <div class="score-main">
-        <div class="score-value">{Math.round(state.overallScore)}</div>
-        <div class="score-label">
-          <span>efficiency</span>
-          {state.lastEvent && (
-            <span class={`delta delta-${deltaClass}`}>
-              {delta > 0 ? '▲' : delta < 0 ? '▼' : '—'} {Math.abs(delta)}
-            </span>
-          )}
+      <div class="health-block">
+        <div class="health-head">
+          <span class="health-title">Health</span>
+          <span class={`health-value health-${healthClass}`}>{health}</span>
+        </div>
+        <div class="health-bar">
+          <div class={`health-bar-fill health-${healthClass}`} style={{ width: `${health}%` }} />
         </div>
       </div>
 
-      <div class="score-side">
-        <div class="score-waste">
-          <span class="muted">waste</span>
-          <strong>{Math.round(state.wasteScore)}</strong>
+      <div class="score-row">
+        <div class="score-metric">
+          <span class="metric-num">{Math.round(state.overallScore)}</span>
+          <span class="metric-label">
+            efficiency
+            {state.lastEvent && (
+              <span class={`delta delta-${deltaClass}`}>
+                {delta > 0 ? '\u25b2' : delta < 0 ? '\u25bc' : '\u2014'} {Math.abs(delta)}
+              </span>
+            )}
+          </span>
+        </div>
+        <div class="score-metric">
+          <span class="metric-num metric-waste">{Math.round(state.wasteScore)}</span>
+          <span class="metric-label">waste</span>
         </div>
         {trend.length >= 2 && (
           <svg viewBox="0 0 120 28" class="sparkline" preserveAspectRatio="none">
@@ -46,6 +58,13 @@ export function ScoreHeader({ state }: { state: TamaState }) {
           </svg>
         )}
       </div>
+
+      {preliminary && (
+        <div class="calc-note">
+          <span class="calc-dot" />
+          Still calculating — preliminary score
+        </div>
+      )}
     </div>
   );
 }

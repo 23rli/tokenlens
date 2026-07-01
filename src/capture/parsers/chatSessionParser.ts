@@ -77,6 +77,7 @@ export function parseChatSession(content: string): ParsedChatSession {
   }
 
   const meta = state?.inputState?.selectedModel?.metadata;
+  const modelConfig = state?.inputState?.modelConfiguration;
   const model: ModelInfo | undefined = meta
     ? {
         id: meta.id ?? meta.family ?? 'unknown',
@@ -84,6 +85,10 @@ export function parseChatSession(content: string): ParsedChatSession {
         vendor: meta.vendor,
         maxInputTokens: meta.maxInputTokens,
         maxOutputTokens: meta.maxOutputTokens,
+        reasoningEffort:
+          typeof modelConfig?.reasoningEffort === 'string'
+            ? modelConfig.reasoningEffort
+            : undefined,
       }
     : undefined;
 

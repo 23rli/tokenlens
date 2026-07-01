@@ -26,7 +26,10 @@ export interface ModelInfo {
   cacheReadPer1M?: number;
   cacheWritePer1M?: number;
   contextMaxTokens?: number;
+  /** Reasoning-effort levels the model SUPPORTS (from models.json capabilities). */
   reasoningEfforts?: string[];
+  /** The reasoning/thinking effort actually SELECTED for this session (e.g. 'high'). */
+  reasoningEffort?: string;
   maxThinkingBudget?: number;
 }
 
