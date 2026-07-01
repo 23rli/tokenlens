@@ -41,6 +41,17 @@ export interface TipView {
   estimatedTokensSaved?: number;
 }
 
+/** Live score for a draft typed in the compose box (offline, no state change). */
+export interface ComposeResult {
+  text: string;
+  overallScore: number;
+  wasteScore: number;
+  tip?: string;
+  rewrittenPrompt?: string;
+  estimatedTokenReductionPct?: number;
+  inputTokens: number;
+}
+
 /** A point on the session score trend line. */
 export interface ScorePoint {
   t: number;
@@ -106,7 +117,8 @@ export interface TamaState {
 /** Messages sent host → webview. */
 export type HostMessage =
   | { type: 'state'; state: TamaState }
-  | { type: 'busy'; busy: boolean };
+  | { type: 'busy'; busy: boolean }
+  | { type: 'composeResult'; result: ComposeResult };
 
 /** Messages sent webview → host. */
 export type WebviewMessage =
@@ -116,4 +128,6 @@ export type WebviewMessage =
   | { type: 'toggleCapture' }
   | { type: 'runDemo' }
   | { type: 'applyTip'; rewrittenPrompt: string }
-  | { type: 'copyTip'; text: string };
+  | { type: 'copyTip'; text: string }
+  | { type: 'composeInput'; text: string }
+  | { type: 'copyToCopilot'; text: string; adopted: boolean };

@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import type { TamaStore } from '../state/tamaStore';
-import type { HostMessage, WebviewMessage } from './contract';
+import type { ComposeResult, HostMessage, WebviewMessage } from './contract';
 import { buildDashboardHtml } from './html';
 
 export interface DashboardHandlers {
   toggleCapture: () => void;
+  scoreDraft: (text: string) => ComposeResult;
+  copyToCopilot: (input: { text: string; adopted: boolean }) => void;
 }
 
 /** Sidebar webview that renders the pet, metrics, and coaching panel. */
@@ -68,6 +70,12 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'copyTip':
         void vscode.env.clipboard.writeText(msg.text);
+        break;
+      case 'composeInput':
+        this.post({ type: 'composeResult', result: this.handlers.scoreDraft(msg.text) });
+        break;
+      case 'copyToCopilot':
+        this.handlers.copyToCopilot({ text: msg.text, adopted: msg.adopted });
         break;
     }
   }

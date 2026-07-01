@@ -99,6 +99,24 @@
         "command": "tokentama.setLlmApiKey",
         "title": "Set coaching LLM API key",
         "category": "Tokentama"
+      },
+      {
+        "command": "tokentama.exportPilotData",
+        "title": "Export pilot data (JSON + CSV)",
+        "category": "Tokentama",
+        "icon": "$(export)"
+      },
+      {
+        "command": "tokentama.ingestHistory",
+        "title": "Ingest Copilot history into corpus",
+        "category": "Tokentama",
+        "icon": "$(database)"
+      },
+      {
+        "command": "tokentama.exportCorpus",
+        "title": "Export training corpus (JSONL)",
+        "category": "Tokentama",
+        "icon": "$(cloud-download)"
       }
     ],
     "menus": {
@@ -117,6 +135,16 @@
           "command": "tokentama.runDemo",
           "when": "view == tokentama.dashboard",
           "group": "navigation@4"
+        },
+        {
+          "command": "tokentama.exportPilotData",
+          "when": "view == tokentama.dashboard",
+          "group": "navigation@5"
+        },
+        {
+          "command": "tokentama.ingestHistory",
+          "when": "view == tokentama.dashboard",
+          "group": "navigation@6"
         },
         {
           "command": "tokentama.scorePrompt",
@@ -211,6 +239,54 @@
           "type": "number",
           "default": 3,
           "description": "Upper bound on the cost/carbon intensity multiplier that amplifies damage for expensive/heavy prompts."
+        },
+        "tokentama.capture.mode": {
+          "type": "string",
+          "enum": [
+            "hybrid",
+            "event",
+            "disk"
+          ],
+          "enumDescriptions": [
+            "Live scoring via @tokentama/compose, reconciled against on-disk sessions for real tokens (recommended).",
+            "Live event path only — no on-disk watcher.",
+            "On-disk watcher only — legacy passive capture."
+          ],
+          "default": "hybrid",
+          "description": "How Tokentama captures Copilot prompts."
+        },
+        "tokentama.capture.scope": {
+          "type": "string",
+          "enum": [
+            "window",
+            "all"
+          ],
+          "enumDescriptions": [
+            "Capture only THIS window's Copilot sessions.",
+            "Follow the globally-newest Copilot session across every window (use when Tokentama runs in a different window than the one you code in)."
+          ],
+          "default": "window",
+          "description": "Which Copilot sessions live capture watches."
+        },
+        "tokentama.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Collect local, anonymized pilot telemetry (prompt scores, suggestions shown/adopted). Off by default; nothing leaves your machine — use 'Export pilot data' to share explicitly."
+        },
+        "tokentama.telemetry.hashPrompts": {
+          "type": "boolean",
+          "default": true,
+          "description": "Hash prompt text in telemetry/export instead of storing it raw. Keep on unless raw text is explicitly consented for the pilot."
+        },
+        "tokentama.corpus.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Record every captured prompt and its lean rewrite to a local training corpus (used to build an automatic prompt-rewriter). Stored on-device only."
+        },
+        "tokentama.corpus.storeRawText": {
+          "type": "boolean",
+          "default": true,
+          "description": "Store raw prompt + rewrite text in the local corpus. Required to train a text-to-text rewriter on your own style. Never leaves your machine; turn off to store hashes only."
         }
       }
     }

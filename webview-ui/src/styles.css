@@ -894,6 +894,63 @@ button.ghost:hover {
   color: var(--vscode-charts-green, #4caf50);
 }
 
+/* ---------- Compose box: live, pre-send coaching ---------- */
+.compose {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.06));
+}
+.compose-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.compose-score {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1;
+}
+.compose-score.compose-high {
+  color: var(--vscode-charts-green, #3fb950);
+}
+.compose-score.compose-mid {
+  color: var(--vscode-charts-yellow, #d29922);
+}
+.compose-score.compose-low {
+  color: var(--vscode-charts-red, #f85149);
+}
+.compose-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-input-border, rgba(128, 128, 128, 0.3));
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+}
+.compose-tip {
+  margin: 0;
+  font-size: 12px;
+  color: var(--vscode-foreground);
+}
+.compose-rewrite {
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  border-radius: 8px;
+  overflow: hidden;
+}
+.compose-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* ============================================================================
    No-scroll redesign — EcoScore + impact showcase. Overrides above where needed.
    ========================================================================== */

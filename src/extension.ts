@@ -8,6 +8,10 @@ import { findActiveSession, listCopilotSessions } from './capture/copilotPaths';
 import { readSessionEvents } from './capture/copilotReader';
 import { StatusBar } from './status/statusBar';
 import { DashboardViewProvider } from './webview/DashboardViewProvider';
+import { TelemetryService } from './telemetry/telemetryService';
+import { hashText } from './telemetry/hash';
+import type { TelemetryEvent } from './types/Telemetry';
+import { CorpusStore } from './data/corpusStore';
 
 const SECRET_KEY = 'tokentama.llmApiKey';
 
@@ -40,10 +44,20 @@ export function activate(context: vscode.ExtensionContext): void {
     };
   };
 
-  const scoreService = new ScoreService(store, getCoachConfig, log);
+  const telemetry = new TelemetryService(hashText(vscode.env.machineId));
+  context.subscriptions.push(telemetry);
+
+  const corpus = new CorpusStore(
+    context.globalStorageUri.fsPath,
+    () => vscode.workspace.getConfiguration('tokentama.corpus').get<boolean>('enabled', true),
+    () => vscode.workspace.getConfiguration('tokentama.corpus').get<boolean>('storeRawText', true),
+  );
+
+  const scoreService = new ScoreService(store, getCoachConfig, log, telemetry, corpus);
 
   const statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
+
   store.onDidChange((state) => statusBar.update(state));
   statusBar.update(store.getState());
 
@@ -51,9 +65,22 @@ export function activate(context: vscode.ExtensionContext): void {
   let announcedCapture = false;
   const startWatcher = (): void => {
     if (watcher) return;
-    if (!workspaceHash) {
+    const captureCfg = vscode.workspace.getConfiguration('tokentama.capture');
+    const mode = captureCfg.get<string>('mode', 'hybrid');
+    if (mode === 'event') {
       log(
-        'Ambient capture paused: this window has no folder open, so there is no window-scoped Copilot session. Open a folder (the dev host opens the sandbox/ folder via F5), or use @tokentama / Score this prompt.',
+        'Capture mode = event: on-disk watcher disabled. Live scoring runs via @tokentama and the compose box; enable hybrid/disk mode to reconcile real tokens.',
+      );
+      return;
+    }
+    // Capture scope: 'window' pins to THIS window's sessions; 'all' follows the
+    // globally-newest Copilot session across every window (use when Tokentama
+    // runs in a different window than the one you code in).
+    const scope = captureCfg.get<string>('scope', 'window');
+    const hashScope = scope === 'all' ? undefined : workspaceHash;
+    if (scope !== 'all' && !workspaceHash) {
+      log(
+        'Ambient capture paused: this window has no folder open, so there is no window-scoped Copilot session. Open a folder, set "tokentama.capture.scope" to "all", or use @tokentama / the compose box.',
       );
       return;
     }
@@ -72,7 +99,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
       void scoreService.scoreEvent(event, 'copilot', { preliminary: meta?.preliminary });
-    }, workspaceHash);
+    }, hashScope);
     watcher.start();
     context.subscriptions.push(watcher);
     log(
@@ -96,7 +123,28 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
 
-  const provider = new DashboardViewProvider(context.extensionUri, store, { toggleCapture });
+  const copyToCopilot = ({ text, adopted }: { text: string; adopted: boolean }): void => {
+    void vscode.env.clipboard.writeText(text);
+    if (adopted) store.markTipApplied();
+    telemetry.suggestionShown({ sessionId: 'compose', source: 'compose', promptText: text });
+    telemetry.suggestionAdopted({
+      sessionId: 'compose',
+      source: 'compose',
+      promptText: text,
+      adopted,
+    });
+    void vscode.window.showInformationMessage(
+      adopted
+        ? 'Leaner rewrite copied — paste it into Copilot Chat.'
+        : 'Prompt copied to clipboard.',
+    );
+  };
+
+  const provider = new DashboardViewProvider(context.extensionUri, store, {
+    toggleCapture,
+    scoreDraft: (text) => scoreService.scoreDraft(text),
+    copyToCopilot,
+  });
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(DashboardViewProvider.viewType, provider, {
       webviewOptions: { retainContextWhenHidden: true },
@@ -123,6 +171,13 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand('tokentama.runDemo', () => scoreService.runDemo()),
     vscode.commands.registerCommand('tokentama.setLlmApiKey', () => setLlmApiKey(context)),
+    vscode.commands.registerCommand('tokentama.exportPilotData', () =>
+      exportPilotData(store, telemetry, log),
+    ),
+    vscode.commands.registerCommand('tokentama.ingestHistory', () =>
+      ingestHistory(scoreService, corpus, log, workspaceHash),
+    ),
+    vscode.commands.registerCommand('tokentama.exportCorpus', () => exportCorpus(corpus, log)),
   );
 
   registerChatParticipant(context, scoreService, store, log);
@@ -302,4 +357,163 @@ async function setLlmApiKey(context: vscode.ExtensionContext): Promise<void> {
     await context.secrets.store(SECRET_KEY, key);
     void vscode.window.showInformationMessage('Tokentama coaching API key saved.');
   }
+}
+
+/**
+ * Export locally-buffered pilot telemetry as JSON + CSV to a folder the user
+ * picks. This is the explicit, consented handoff path — the only way pilot data
+ * leaves the buffer. Includes before/after session deltas from metrics.
+ */
+async function exportPilotData(
+  store: TamaStore,
+  telemetry: TelemetryService,
+  log: (message: string) => void,
+): Promise<void> {
+  const events = telemetry.snapshot();
+  if (events.length === 0) {
+    void vscode.window.showInformationMessage(
+      'Tokentama: no pilot data collected yet. Enable "tokentama.telemetry.enabled" and score some prompts first.',
+    );
+    return;
+  }
+  const metrics = store.getState().metrics;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const summary = { exportedAt: new Date().toISOString(), eventCount: events.length, metrics };
+  const json = JSON.stringify({ summary, events }, null, 2);
+
+  const cols = [
+    'timestamp',
+    'name',
+    'sessionId',
+    'source',
+    'model',
+    'reasoningEffort',
+    'dominantCategory',
+    'overallScore',
+    'wasteScore',
+    'inputTokens',
+    'outputTokens',
+    'estimatedCostUsd',
+    'retryCount',
+    'promptHash',
+  ];
+  const cell = (e: TelemetryEvent, key: string): string => {
+    const raw =
+      key === 'timestamp'
+        ? e.timestamp
+        : key === 'name'
+          ? e.name
+          : key === 'sessionId'
+            ? e.sessionId
+            : (e.properties?.[key] ?? e.measurements?.[key] ?? '');
+    const s = String(raw).replace(/"/g, '""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  };
+  const csv = [cols.join(',')]
+    .concat(events.map((e) => cols.map((c) => cell(e, c)).join(',')))
+    .join('\n');
+
+  const folder = await vscode.window.showOpenDialog({
+    canSelectFolders: true,
+    canSelectFiles: false,
+    canSelectMany: false,
+    openLabel: 'Export Tokentama pilot data here',
+  });
+  if (!folder || folder.length === 0) return;
+  const dir = folder[0];
+  const enc = new TextEncoder();
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(dir, `tokentama-pilot-${stamp}.json`),
+    enc.encode(json),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(dir, `tokentama-pilot-${stamp}.csv`),
+    enc.encode(csv),
+  );
+  log(`exportPilotData: wrote ${events.length} events to ${dir.fsPath}`);
+  void vscode.window.showInformationMessage(
+    `Tokentama pilot data exported (${events.length} events) to ${dir.fsPath}.`,
+  );
+}
+
+/**
+ * Backfill the local training corpus from the user's ENTIRE Copilot history on
+ * disk (every session, every window). Scores each turn offline and records the
+ * original prompt + its lean rewrite — the substrate for training an auto-rewriter.
+ */
+async function ingestHistory(
+  scoreService: ScoreService,
+  corpus: CorpusStore,
+  log: (message: string) => void,
+  _onlyHash?: string,
+): Promise<void> {
+  const before = corpus.count();
+  let scanned = 0;
+  await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: 'Tokentama: ingesting Copilot history…' },
+    async () => {
+      let sessions: ReturnType<typeof listCopilotSessions> = [];
+      try {
+        sessions = listCopilotSessions(undefined, undefined);
+      } catch {
+        sessions = [];
+      }
+      scoreService.beginIngest();
+      for (const session of sessions) {
+        let events: ReturnType<typeof readSessionEvents> = [];
+        try {
+          events = readSessionEvents(session);
+        } catch {
+          continue;
+        }
+        for (const ev of events) {
+          if (!ev.promptText.trim()) continue;
+          scoreService.ingestToCorpus(ev);
+          scanned++;
+        }
+      }
+    },
+  );
+  const added = corpus.count() - before;
+  log(`ingestHistory: scanned ${scanned} turns, added ${added} new corpus record(s) (total ${corpus.count()}).`);
+  void vscode.window.showInformationMessage(
+    `Tokentama ingested ${added} new prompt(s) from your Copilot history (corpus: ${corpus.count()}).`,
+  );
+}
+
+/**
+ * Export the local corpus as JSONL plus a training-ready file of
+ * (original prompt → lean rewrite) pairs, to a folder the user picks.
+ */
+async function exportCorpus(corpus: CorpusStore, log: (message: string) => void): Promise<void> {
+  const records = corpus.all();
+  if (records.length === 0) {
+    void vscode.window.showInformationMessage(
+      'Tokentama: the corpus is empty. Run "Ingest Copilot history" or let capture collect some prompts first.',
+    );
+    return;
+  }
+  const pairs = corpus.trainingPairs();
+  const folder = await vscode.window.showOpenDialog({
+    canSelectFolders: true,
+    canSelectFiles: false,
+    canSelectMany: false,
+    openLabel: 'Export Tokentama corpus here',
+  });
+  if (!folder || folder.length === 0) return;
+  const dir = folder[0];
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const enc = new TextEncoder();
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(dir, `tokentama-corpus-${stamp}.jsonl`),
+    enc.encode(records.map((r) => JSON.stringify(r)).join('\n')),
+  );
+  await vscode.workspace.fs.writeFile(
+    vscode.Uri.joinPath(dir, `tokentama-corpus-training-${stamp}.jsonl`),
+    enc.encode(pairs.map((p) => JSON.stringify(p)).join('\n')),
+  );
+  log(`exportCorpus: wrote ${records.length} records and ${pairs.length} training pairs to ${dir.fsPath}`);
+  void vscode.window.showInformationMessage(
+    `Tokentama corpus exported: ${records.length} records, ${pairs.length} training pairs → ${dir.fsPath}.`,
+  );
 }

@@ -169,6 +169,7 @@ export class TamaStore {
 
     return {
       world: scoreToState(this.data.health),
+      health: Math.round(this.data.health),
       overallScore: this.data.lastEvent?.overallScore ?? Math.round(this.data.health),
       wasteScore: this.data.lastEvent?.wasteScore ?? 0,
       subscores: this.data.lastSubscores ?? FULL_SUBSCORES,

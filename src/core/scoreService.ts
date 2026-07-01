@@ -1,9 +1,16 @@
 import type { PromptEvent, ScorePromptRequest } from '@tokentama/shared-types';
-import { dominantWasteCategories, scorePrompt, clampScore } from '@tokentama/scoring-engine';
-import { generateTip, type CoachConfig } from '@tokentama/llm-adapters';
+import {
+  dominantWasteCategories,
+  scorePrompt,
+  clampScore,
+  estimateTokenUsage,
+} from '@tokentama/scoring-engine';
+import { generateTip, heuristicGenerateTip, type CoachConfig } from '@tokentama/llm-adapters';
 import { SessionTracker, buildPromptEvent } from '../capture/parsers';
 import type { TamaStore } from '../state/tamaStore';
-import type { TipView } from '../webview/contract';
+import type { ComposeResult, TipView } from '../webview/contract';
+import type { ScoreTelemetry } from '../telemetry/telemetryService';
+import type { CorpusSink } from '../data/corpusStore';
 
 const MANUAL_SESSION = 'manual-session';
 
@@ -94,6 +101,7 @@ const DEMO_STEPS: DemoStep[] = [
  */
 export class ScoreService {
   private readonly trackers = new Map<string, SessionTracker>();
+  private readonly ingestTrackers = new Map<string, SessionTracker>();
   private manualTurn = 0;
   private demoRunning = false;
 
@@ -101,6 +109,8 @@ export class ScoreService {
     private readonly store: TamaStore,
     private readonly getCoachConfig: () => Promise<CoachConfig>,
     private readonly log?: (message: string) => void,
+    private readonly telemetry?: ScoreTelemetry,
+    private readonly corpus?: CorpusSink,
   ) {}
 
   private tracker(sessionId: string): SessionTracker {
@@ -108,6 +118,15 @@ export class ScoreService {
     if (!t) {
       t = new SessionTracker();
       this.trackers.set(sessionId, t);
+    }
+    return t;
+  }
+
+  private ingestTracker(sessionId: string): SessionTracker {
+    let t = this.ingestTrackers.get(sessionId);
+    if (!t) {
+      t = new SessionTracker();
+      this.ingestTrackers.set(sessionId, t);
     }
     return t;
   }
@@ -148,12 +167,185 @@ export class ScoreService {
     };
     if (preliminary) this.store.previewScore(resp, recordOpts);
     else this.store.recordScore(resp, recordOpts);
+    if (!preliminary) {
+      this.reportTelemetry(event, request, resp, tip, source);
+      this.recordToCorpus(
+        event,
+        request,
+        resp,
+        tip?.rewrittenPrompt,
+        tip?.estimatedTokenReductionPct,
+        source,
+        event.adoptedPreviousTip,
+      );
+    }
     this.log?.(
       `${preliminary ? 'preview' : 'scored'} (${source}): overall ${Math.round(
         resp.overallScore,
       )} · waste ${Math.round(resp.wasteScore)}`,
     );
     return resp.overallScore;
+  }
+
+  /**
+   * Score an in-progress DRAFT for the compose box. Offline heuristic only (fast,
+   * deterministic, no network) and pure: it never touches session state, health,
+   * or the store — so live keystroke scoring can't chip the pet.
+   */
+  scoreDraft(text: string): ComposeResult {
+    const req: ScorePromptRequest = {
+      sessionId: 'compose',
+      userId: 'local',
+      promptText: text,
+      metadata: { promptLengthChars: text.length },
+    };
+    const resp = scorePrompt(req);
+    const tokens = estimateTokenUsage(req);
+    const categories = dominantWasteCategories(resp);
+    let tip: string | undefined;
+    let rewrittenPrompt: string | undefined;
+    let estimatedTokenReductionPct: number | undefined;
+    if (text.trim() && !(resp.overallScore >= 85 && categories.length === 0)) {
+      const t = heuristicGenerateTip({
+        promptText: text,
+        reasons: resp.reasons,
+        improvements: resp.improvements,
+        wasteCategories: categories,
+        overallScore: resp.overallScore,
+      });
+      tip = t.shortTip;
+      rewrittenPrompt = t.rewrittenPrompt;
+      estimatedTokenReductionPct = t.estimatedSavings?.estimatedTokenReductionPct;
+    }
+    return {
+      text,
+      overallScore: resp.overallScore,
+      wasteScore: resp.wasteScore,
+      tip,
+      rewrittenPrompt,
+      estimatedTokenReductionPct,
+      inputTokens: tokens.inputTokens,
+    };
+  }
+
+  /** Reset per-run ingest state before a bulk history ingestion. */
+  beginIngest(): void {
+    this.ingestTrackers.clear();
+  }
+
+  /**
+   * Bulk-ingest a historical Copilot turn into the corpus: score offline, derive
+   * the heuristic lean rewrite (the training target), and record it — WITHOUT
+   * touching the pet, store, or telemetry. Feed a session's turns in order so
+   * retry/redundancy context builds correctly.
+   */
+  ingestToCorpus(event: PromptEvent): void {
+    if (!this.corpus) return;
+    const request = this.ingestTracker(event.sessionId).toScoreRequest(event, { record: true });
+    const resp = scorePrompt(request);
+    const categories = dominantWasteCategories(resp);
+    let rewrittenPrompt: string | undefined;
+    let estimatedTokenReductionPct: number | undefined;
+    if (event.promptText.trim() && !(resp.overallScore >= 85 && categories.length === 0)) {
+      const t = heuristicGenerateTip({
+        promptText: event.promptText,
+        reasons: resp.reasons,
+        improvements: resp.improvements,
+        wasteCategories: categories,
+        overallScore: resp.overallScore,
+      });
+      rewrittenPrompt = t.rewrittenPrompt;
+      estimatedTokenReductionPct = t.estimatedSavings?.estimatedTokenReductionPct;
+    }
+    this.recordToCorpus(
+      event,
+      request,
+      resp,
+      rewrittenPrompt,
+      estimatedTokenReductionPct,
+      'copilot',
+      event.adoptedPreviousTip,
+    );
+  }
+
+  /** Append a scored turn (with its lean rewrite) to the local training corpus. */
+  private recordToCorpus(
+    event: PromptEvent,
+    request: ScorePromptRequest,
+    resp: ReturnType<typeof scorePrompt>,
+    rewrittenPrompt: string | undefined,
+    estimatedTokenReductionPct: number | undefined,
+    source: string,
+    adopted?: boolean,
+  ): void {
+    if (!this.corpus) return;
+    const tokens = event.tokens ?? resp.tokens;
+    this.corpus.record({
+      sessionId: event.sessionId,
+      turnIndex: event.turnIndex,
+      source,
+      promptText: event.promptText,
+      model: event.model?.family,
+      reasoningEffort: event.model?.reasoningEffort,
+      overallScore: resp.overallScore,
+      wasteScore: resp.wasteScore,
+      wasteCategories: resp.wasteBreakdown
+        .filter((c) => c.severity > 0.05)
+        .map((c) => c.category),
+      inputTokens: tokens?.inputTokens ?? 0,
+      outputTokens: tokens?.outputTokens ?? 0,
+      tokensReal: tokens ? !tokens.estimated : false,
+      retryCount: request.metadata?.retryCountInSession ?? 0,
+      rewrittenPrompt,
+      estimatedTokenReductionPct,
+      adopted,
+    });
+  }
+
+  /** Emit local-first pilot telemetry for a finalized score. No-op if disabled. */
+  private reportTelemetry(
+    event: PromptEvent,
+    request: ScorePromptRequest,
+    resp: ReturnType<typeof scorePrompt>,
+    tip: TipView | undefined,
+    source: 'manual' | 'copilot',
+  ): void {
+    if (!this.telemetry) return;
+    const tokens = event.tokens ?? resp.tokens;
+    this.telemetry.promptScored({
+      sessionId: event.sessionId,
+      source,
+      promptText: event.promptText,
+      overallScore: resp.overallScore,
+      wasteScore: resp.wasteScore,
+      inputTokens: tokens?.inputTokens ?? 0,
+      outputTokens: tokens?.outputTokens ?? 0,
+      estimatedCostUsd: tokens?.estimatedCostUsd ?? 0,
+      retryCount: request.metadata?.retryCountInSession,
+      dominantCategory: dominantWasteCategories(resp)[0],
+      model: event.model?.family,
+      reasoningEffort: event.model?.reasoningEffort,
+      preliminary: false,
+    });
+    if (tip?.rewrittenPrompt) {
+      this.telemetry.suggestionShown({
+        sessionId: event.sessionId,
+        source,
+        promptText: event.promptText,
+        category: tip.category,
+        estimatedTokenReductionPct: tip.estimatedTokenReductionPct,
+        model: event.model?.family,
+      });
+    }
+    if (event.adoptedPreviousTip !== undefined) {
+      this.telemetry.suggestionAdopted({
+        sessionId: event.sessionId,
+        source,
+        promptText: event.promptText,
+        adopted: event.adoptedPreviousTip,
+        model: event.model?.family,
+      });
+    }
   }
 
   /**

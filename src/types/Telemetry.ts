@@ -8,7 +8,9 @@ export type TelemetryEventName =
   | 'history_viewed'
   | 'tip_accepted'
   | 'tip_ignored'
-  | 'score_recovered';
+  | 'score_recovered'
+  | 'suggestion_shown'
+  | 'suggestion_adopted';
 
 /** A telemetry event, shaped for Application Insights trackEvent. */
 export interface TelemetryEvent {
