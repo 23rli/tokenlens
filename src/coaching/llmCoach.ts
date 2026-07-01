@@ -44,6 +44,27 @@ async function callChatCompletion(
   system: string,
   user: string,
 ): Promise<string> {
+  return chatComplete(config, system, user, { json: true, maxTokens: 500 });
+}
+
+export interface ChatCompleteOptions {
+  maxTokens?: number;
+  temperature?: number;
+  /** Request a JSON object response (for structured coach output). */
+  json?: boolean;
+}
+
+/**
+ * Generic single-turn chat completion against the configured provider. Reused by
+ * the coach (JSON tips) and the auto-rewriter (plain-text rewrites). Throws on any
+ * failure so callers can fall back to the offline path.
+ */
+export async function chatComplete(
+  config: CoachConfig,
+  system: string,
+  user: string,
+  opts: ChatCompleteOptions = {},
+): Promise<string> {
   const { url, headers, model } = resolveEndpoint(config);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
@@ -58,13 +79,13 @@ async function callChatCompletion(
           { role: 'system', content: system },
           { role: 'user', content: user },
         ],
-        temperature: 0.4,
-        max_tokens: 500,
-        response_format: { type: 'json_object' },
+        temperature: opts.temperature ?? 0.4,
+        max_tokens: opts.maxTokens ?? 500,
+        ...(opts.json ? { response_format: { type: 'json_object' } } : {}),
       }),
     });
     if (!response.ok) {
-      throw new Error(`Coach LLM HTTP ${response.status}`);
+      throw new Error(`LLM HTTP ${response.status}`);
     }
     const data = (await response.json()) as {
       choices?: { message?: { content?: string } }[];

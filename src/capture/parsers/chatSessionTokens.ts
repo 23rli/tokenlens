@@ -1,8 +1,16 @@
 /** Real per-turn token + credit counts, keyed by request/turn index. */
+export interface PromptTokenDetail {
+  category: string;
+  label: string;
+  percentageOfPrompt: number;
+}
+
 export interface TurnTokens {
   promptTokens?: number;
   completionTokens?: number;
   copilotCredits?: number;
+  /** Per-category split of the input tokens (System, Tool Definitions, Messages…). */
+  promptTokenDetails?: PromptTokenDetail[];
 }
 
 const TOKEN_FIELDS = ['promptTokens', 'completionTokens', 'copilotCredits'] as const;
@@ -28,6 +36,21 @@ export function parseChatSessionTokens(content: string): Map<number, TurnTokens>
     byTurn.set(idx, cur);
   };
 
+  const setDetails = (idx: number, value: unknown): void => {
+    if (!Array.isArray(value)) return;
+    const details = value.filter(
+      (d): d is PromptTokenDetail =>
+        d != null &&
+        typeof d.category === 'string' &&
+        typeof d.label === 'string' &&
+        typeof d.percentageOfPrompt === 'number',
+    );
+    if (details.length === 0) return;
+    const cur = byTurn.get(idx) ?? {};
+    cur.promptTokenDetails = details;
+    byTurn.set(idx, cur);
+  };
+
   for (const line of lines) {
     let parsed: { kind?: number; k?: unknown[]; v?: any };
     try {
@@ -40,6 +63,7 @@ export function parseChatSessionTokens(content: string): Map<number, TurnTokens>
       parsed.v.requests.forEach((req: any, i: number) => {
         if (!req || typeof req !== 'object') return;
         for (const field of TOKEN_FIELDS) set(i, field, req[field]);
+        setDetails(i, req.promptTokenDetails);
       });
       continue;
     }
@@ -53,6 +77,8 @@ export function parseChatSessionTokens(content: string): Map<number, TurnTokens>
       const field = parsed.k[2];
       if (typeof field === 'string' && (TOKEN_FIELDS as readonly string[]).includes(field)) {
         set(parsed.k[1], field, parsed.v);
+      } else if (field === 'promptTokenDetails') {
+        setDetails(parsed.k[1], parsed.v);
       }
     }
   }

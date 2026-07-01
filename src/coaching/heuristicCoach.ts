@@ -31,9 +31,12 @@ function dedupeSentences(text: string): string {
     .join(' ');
 }
 
-/** Build a cleaned, structured rewrite of a wasteful prompt — no LLM required. */
-export function heuristicRewrite(promptText: string, categories: WasteCategory[]): string {
-  // 1) Clean: drop duplicate sentences, strip retry + politeness padding.
+/**
+ * Cleaning-only lean rewrite: dedupe sentences, strip retry + politeness padding,
+ * tidy punctuation. Produces the shortest faithful version of the prompt WITHOUT
+ * appending any coaching guidance — so it's always leaner. Used by the auto-rewriter.
+ */
+export function leanRewrite(promptText: string): string {
   let core = dedupeSentences(promptText)
     .replace(RETRY_FILLER, '')
     .replace(FILLER_PATTERN, '')
@@ -47,6 +50,13 @@ export function heuristicRewrite(promptText: string, categories: WasteCategory[]
   }
   core = core.charAt(0).toUpperCase() + core.slice(1);
   if (!/[.!?]$/.test(core)) core += '.';
+  return core;
+}
+
+/** Build a cleaned, structured rewrite of a wasteful prompt — no LLM required. */
+export function heuristicRewrite(promptText: string, categories: WasteCategory[]): string {
+  // 1) Clean: drop duplicate sentences, strip retry + politeness padding.
+  const core = leanRewrite(promptText);
 
   // 2) Add only the lines that address the detected issues — concrete, not generic.
   const set = new Set(categories);

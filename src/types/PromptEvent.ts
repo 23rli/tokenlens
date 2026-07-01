@@ -46,6 +46,18 @@ export interface TokenEstimate {
   /** Real Copilot credits metered for the turn, when available from disk. */
   copilotCredits?: number;
   estimated: boolean;
+  /** Where the input (prompt) tokens went, from Copilot's promptTokenDetails. */
+  contextBreakdown?: ContextSlice[];
+}
+
+/** One category of the input-token breakdown (e.g. System Instructions, Messages). */
+export interface ContextSlice {
+  category: string;
+  label: string;
+  /** Percentage of the whole prompt (input) this slice occupies (0..100). */
+  pct: number;
+  /** Absolute input tokens attributed to this slice. */
+  tokens: number;
 }
 
 /**

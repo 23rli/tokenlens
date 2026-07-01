@@ -287,6 +287,31 @@
           "type": "boolean",
           "default": true,
           "description": "Store raw prompt + rewrite text in the local corpus. Required to train a text-to-text rewriter on your own style. Never leaves your machine; turn off to store hashes only."
+        },
+        "tokentama.rewriter.mode": {
+          "type": "string",
+          "enum": [
+            "off",
+            "offline",
+            "llm"
+          ],
+          "enumDescriptions": [
+            "No automatic rewrite.",
+            "Deterministic offline rewrite — zero token cost (recommended default).",
+            "Corpus few-shot rewrite via a (cheap) configured model, style-matched; falls back to offline on any error."
+          ],
+          "default": "offline",
+          "description": "How the 'Rewrite in my style' action produces a leaner prompt. Only ever surfaces a rewrite that is actually shorter, so using it always saves tokens."
+        },
+        "tokentama.rewriter.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model/deployment used for llm-mode rewrites. Leave empty to use the coaching model (defaults to a low-cost model such as gpt-4o-mini)."
+        },
+        "tokentama.rewriter.fewShotK": {
+          "type": "number",
+          "default": 3,
+          "description": "How many similar past rewrites from your corpus to use as style examples for llm-mode rewrites."
         }
       }
     }

@@ -2,9 +2,9 @@
  * Shared message + state contract between the extension host and the webview.
  * Types only — safe to import from both the Node host and the browser webview.
  */
-import type { PetWorldState, Subscores, WasteComponent, ModelInfo } from '@tokentama/shared-types';
+import type { PetWorldState, Subscores, WasteComponent, ModelInfo, ContextSlice } from '@tokentama/shared-types';
 
-export type { PetWorldState, Subscores, WasteComponent, ModelInfo } from '@tokentama/shared-types';
+export type { PetWorldState, Subscores, WasteComponent, ModelInfo, ContextSlice } from '@tokentama/shared-types';
 
 /** A single scored prompt, flattened for display in the webview. */
 export interface ScoredEventView {
@@ -19,6 +19,8 @@ export interface ScoredEventView {
   copilotCredits?: number;
   /** True when token counts are real (from chatSessions), not estimated. */
   tokensReal?: boolean;
+  /** Where this turn's input tokens went (system / tools / messages…). */
+  contextBreakdown?: ContextSlice[];
   wasteBreakdown: WasteComponent[];
   reasons: string[];
   improvements: string[];
@@ -50,6 +52,17 @@ export interface ComposeResult {
   rewrittenPrompt?: string;
   estimatedTokenReductionPct?: number;
   inputTokens: number;
+}
+
+/** Result of an on-demand auto-rewrite of a compose-box draft. */
+export interface AutoRewriteView {
+  text: string;
+  rewrittenPrompt?: string;
+  estimatedTokenReductionPct?: number;
+  /** True when the rewrite adds context to reduce vagueness (avoids retries). */
+  clarified?: boolean;
+  source: 'offline' | 'llm' | 'none';
+  examplesUsed: number;
 }
 
 /** A point on the session score trend line. */
@@ -118,7 +131,8 @@ export interface TamaState {
 export type HostMessage =
   | { type: 'state'; state: TamaState }
   | { type: 'busy'; busy: boolean }
-  | { type: 'composeResult'; result: ComposeResult };
+  | { type: 'composeResult'; result: ComposeResult }
+  | { type: 'autoRewriteResult'; result: AutoRewriteView };
 
 /** Messages sent webview → host. */
 export type WebviewMessage =
@@ -130,4 +144,5 @@ export type WebviewMessage =
   | { type: 'applyTip'; rewrittenPrompt: string }
   | { type: 'copyTip'; text: string }
   | { type: 'composeInput'; text: string }
+  | { type: 'autoRewrite'; text: string }
   | { type: 'copyToCopilot'; text: string; adopted: boolean };

@@ -12,6 +12,7 @@ import { TelemetryService } from './telemetry/telemetryService';
 import { hashText } from './telemetry/hash';
 import type { TelemetryEvent } from './types/Telemetry';
 import { CorpusStore } from './data/corpusStore';
+import { RewriteService, type RewriteConfig, type RewriterMode } from './rewriter/rewriteService';
 
 const SECRET_KEY = 'tokentama.llmApiKey';
 
@@ -54,6 +55,18 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   const scoreService = new ScoreService(store, getCoachConfig, log, telemetry, corpus);
+
+  const getRewriteConfig = async (): Promise<RewriteConfig> => {
+    const cfg = vscode.workspace.getConfiguration('tokentama.rewriter');
+    const coach = await getCoachConfig();
+    const model = cfg.get<string>('model')?.trim();
+    return {
+      mode: cfg.get<string>('mode', 'offline') as RewriterMode,
+      fewShotK: cfg.get<number>('fewShotK', 3),
+      coach: model ? { ...coach, deployment: model } : coach,
+    };
+  };
+  const rewriteService = new RewriteService(corpus, getRewriteConfig);
 
   const statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
@@ -143,6 +156,18 @@ export function activate(context: vscode.ExtensionContext): void {
   const provider = new DashboardViewProvider(context.extensionUri, store, {
     toggleCapture,
     scoreDraft: (text) => scoreService.scoreDraft(text),
+    autoRewrite: async (text) => {
+      const model = store.getState().model?.family;
+      const r = await rewriteService.rewrite({ promptText: text, model });
+      return {
+        text,
+        rewrittenPrompt: r.rewrittenPrompt,
+        estimatedTokenReductionPct: r.estimatedTokenReductionPct,
+        clarified: r.clarified,
+        source: r.source,
+        examplesUsed: r.examplesUsed,
+      };
+    },
     copyToCopilot,
   });
   context.subscriptions.push(

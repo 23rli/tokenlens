@@ -4,6 +4,7 @@ import type {
   IngestionSource,
   ToolCallInfo,
   ModelInfo,
+  ContextSlice,
 } from '@tokentama/shared-types';
 import { estimateTokens, estimateCostUsd } from '@tokentama/scoring-engine';
 
@@ -25,6 +26,8 @@ export interface BuildPromptEventInput {
   outputTokensOverride?: number;
   /** Real Copilot credits metered for the turn, when available from disk. */
   copilotCredits?: number;
+  /** Per-category input-token breakdown from Copilot's promptTokenDetails. */
+  contextBreakdown?: ContextSlice[];
 }
 
 /** Build a normalized, self-contained PromptEvent with token + cost estimates. */
@@ -53,6 +56,7 @@ export function buildPromptEvent(input: BuildPromptEventInput): PromptEvent {
       estimatedCostUsd,
       copilotCredits: input.copilotCredits,
       estimated: input.inputTokensOverride == null,
+      contextBreakdown: input.contextBreakdown,
     },
     retryCountInSession: input.retryCountInSession,
     adoptedPreviousTip: input.adoptedPreviousTip,

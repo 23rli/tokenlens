@@ -894,8 +894,7 @@ button.ghost:hover {
   color: var(--vscode-charts-green, #4caf50);
 }
 
-/* ---------- Compose box: live, pre-send coaching ---------- */
-.compose {
+/* ---------- Compose box: live, pre-send coaching ---------- */.compose {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -945,10 +944,75 @@ button.ghost:hover {
   border-radius: 8px;
   overflow: hidden;
 }
+.rewrite-badge {
+  font-weight: 400;
+  color: var(--vscode-descriptionForeground);
+}
 .compose-actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+/* ---------- Context breakdown: where the tokens actually go ---------- */
+.context {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.06));
+}
+.context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.context-total {
+  font-size: 12px;
+  font-weight: 700;
+}
+.context-bar {
+  display: flex;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+}
+.context-seg {
+  height: 100%;
+}
+.context-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.context-legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.context-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.context-label {
+  flex: 1 1 auto;
+}
+.context-val {
+  color: var(--vscode-descriptionForeground);
+}
+.context-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
 }
 
 /* ============================================================================

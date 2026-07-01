@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import type { TamaStore } from '../state/tamaStore';
-import type { ComposeResult, HostMessage, WebviewMessage } from './contract';
+import type { AutoRewriteView, ComposeResult, HostMessage, WebviewMessage } from './contract';
 import { buildDashboardHtml } from './html';
 
 export interface DashboardHandlers {
   toggleCapture: () => void;
   scoreDraft: (text: string) => ComposeResult;
+  autoRewrite: (text: string) => Promise<AutoRewriteView>;
   copyToCopilot: (input: { text: string; adopted: boolean }) => void;
 }
 
@@ -73,6 +74,11 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'composeInput':
         this.post({ type: 'composeResult', result: this.handlers.scoreDraft(msg.text) });
+        break;
+      case 'autoRewrite':
+        void this.handlers
+          .autoRewrite(msg.text)
+          .then((result) => this.post({ type: 'autoRewriteResult', result }));
         break;
       case 'copyToCopilot':
         this.handlers.copyToCopilot({ text: msg.text, adopted: msg.adopted });

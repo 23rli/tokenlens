@@ -70,6 +70,15 @@ export function readSessionEvents(paths: CopilotSessionPaths, userId = 'local-us
     if (!promptText) promptText = earlyPrompts.get(n) ?? promptByRequest.get(n) ?? '';
     if (!promptText) continue;
     const real = tokensByTurn.get(n);
+    const contextBreakdown =
+      real?.promptTokenDetails && real.promptTokens
+        ? real.promptTokenDetails.map((d) => ({
+            category: d.category,
+            label: d.label,
+            pct: d.percentageOfPrompt,
+            tokens: Math.round((real.promptTokens! * d.percentageOfPrompt) / 100),
+          }))
+        : undefined;
     events.push(
       buildPromptEvent({
         source: 'transcript',
@@ -84,6 +93,7 @@ export function readSessionEvents(paths: CopilotSessionPaths, userId = 'local-us
         inputTokensOverride: real?.promptTokens,
         outputTokensOverride: real?.completionTokens,
         copilotCredits: real?.copilotCredits,
+        contextBreakdown,
       }),
     );
   }
