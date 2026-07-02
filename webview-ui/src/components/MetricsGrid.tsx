@@ -1,5 +1,5 @@
 import type { SuccessMetrics } from '../../../src/webview/contract';
-import { fmtNum, fmtPctSigned, fmtSigned, fmtUsd } from '../format';
+import { fmtNum, fmtPctSigned, fmtSigned } from '../format';
 
 interface Card {
   label: string;
@@ -49,10 +49,7 @@ export function MetricsGrid({ metrics }: { metrics: SuccessMetrics }) {
     {
       label: 'CO₂e avoided',
       value: `${metrics.sustainabilityCo2eGrams.toFixed(1)}g`,
-      hint:
-        metrics.totalCredits > 0
-          ? `${metrics.sustainabilityWhSaved.toFixed(1)} Wh · ${Math.round(metrics.totalCredits)} cr`
-          : `${metrics.sustainabilityWhSaved.toFixed(1)} Wh · ${fmtUsd(metrics.totalCostUsd)}`,
+      hint: `${metrics.sustainabilityWhSaved.toFixed(1)} Wh · ${fmtNum(metrics.totalCredits)} AIC`,
       tone: metrics.sustainabilityCo2eGrams > 0 ? 'good' : 'neutral',
     },
   ];

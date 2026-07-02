@@ -6,7 +6,7 @@ import type {
   ModelInfo,
   ContextSlice,
 } from '@tokentama/shared-types';
-import { estimateTokens, estimateCostUsd } from '@tokentama/scoring-engine';
+import { estimateTokens, estimateCostUsd, estimateCredits } from '@tokentama/scoring-engine';
 
 export interface BuildPromptEventInput {
   source: IngestionSource;
@@ -54,6 +54,7 @@ export function buildPromptEvent(input: BuildPromptEventInput): PromptEvent {
       inputTokens,
       outputTokens,
       estimatedCostUsd,
+      estimatedCredits: estimateCredits(inputTokens, outputTokens, model),
       copilotCredits: input.copilotCredits,
       estimated: input.inputTokensOverride == null,
       contextBreakdown: input.contextBreakdown,

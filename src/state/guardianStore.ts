@@ -131,6 +131,7 @@ export class TamaStore {
       outputTokens: event.outputTokens,
       costUsd: event.estimatedCostUsd,
       credits: event.copilotCredits ?? 0,
+      estCredits: event.estimatedCredits ?? 0,
       delta: resp.delta,
     });
     if (this.data.records.length > MAX_RECORDS) this.data.records.shift();
@@ -165,6 +166,7 @@ export class TamaStore {
       gridGramsCo2PerKwh: cfg.get<number>('gridGramsCo2PerKwh', 400),
       co2GramsPer1kTokens: impactCfg.get<number>('co2GramsPer1kTokens', 0.11),
       waterMlPer1kTokens: impactCfg.get<number>('waterMlPer1kTokens', 2),
+      usdPerCredit: impactCfg.get<number>('usdPerCredit', 0),
     });
 
     return {

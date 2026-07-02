@@ -60,9 +60,9 @@ export function LiveData({ state }: { state: TamaState }) {
       <div class="livedata-row">
         <span class="livedata-key">Session</span>
         <span class="livedata-val">
-          {`${fmtNum(metrics.totalTokens)} tokens` +
-            (metrics.totalCredits > 0 ? ` · ${Math.round(metrics.totalCredits)} cr` : '') +
-            ` · ${fmtUsd(metrics.totalCostUsd)}`}
+          {`${fmtNum(metrics.totalTokens)} tokens · ${fmtNum(metrics.totalCredits)} AIC` +
+            (metrics.totalCreditsEstimated ? ' (est.)' : '') +
+            (metrics.hasUsdRate ? ` · ${fmtUsd(metrics.totalCostUsd)}` : '')}
         </span>
       </div>
     </section>

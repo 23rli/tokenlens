@@ -226,6 +226,11 @@
           "default": 2,
           "description": "Estimated millilitres of water per 1,000 tokens, used for the headline environmental impact."
         },
+        "tokentama.impact.usdPerCredit": {
+          "type": "number",
+          "default": 0,
+          "description": "US dollars per Copilot AI credit (AIC), used only to derive an OPTIONAL $ estimate. Copilot meters usage in AICs, so tokens and AICs are the measured units; set this to your org's internal $/AIC rate for a dollar figure. 0 hides $ and shows tokens + AICs instead."
+        },
         "tokentama.health.maxDamage": {
           "type": "number",
           "default": 22,

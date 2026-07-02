@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { resolvePricing, estimateCostUsd, DEFAULT_PRICING } from '../models/pricing';
+import {
+  resolvePricing,
+  estimateCostUsd,
+  estimateCredits,
+  creditsToUsd,
+  DEFAULT_PRICING,
+} from '../models/pricing';
+import type { ModelInfo } from '@tokentama/shared-types';
 import { estimateTokens } from '../models/tokenizer';
 
 describe('resolvePricing', () => {
@@ -25,6 +32,31 @@ describe('estimateCostUsd', () => {
 
   it('is zero for zero tokens', () => {
     expect(estimateCostUsd(0, 0, 'claude-opus')).toBe(0);
+  });
+});
+
+describe('estimateCredits', () => {
+  it('uses the model\'s REAL per-1M credit rates (AICs) when available', () => {
+    const opus: ModelInfo = {
+      id: 'claude-opus-4.8',
+      family: 'claude-opus-4.8',
+      inputPer1M: 500,
+      outputPer1M: 2500,
+    };
+    // 1M in + 1M out at 500/2500 AICs/1M = 3000 AICs
+    expect(estimateCredits(1_000_000, 1_000_000, opus)).toBeCloseTo(3000, 3);
+  });
+
+  it('falls back to the built-in table (credits ≈ table×1000) for unknown models', () => {
+    // claude-opus table input 0.5 → 500 AICs/1M
+    expect(estimateCredits(1_000_000, 0, { id: 'x', family: 'claude-opus' })).toBeCloseTo(500, 3);
+  });
+});
+
+describe('creditsToUsd', () => {
+  it('converts only when a positive rate is given', () => {
+    expect(creditsToUsd(3000, 0.01)).toBeCloseTo(30, 6);
+    expect(creditsToUsd(3000, 0)).toBe(0);
   });
 });
 

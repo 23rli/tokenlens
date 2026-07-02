@@ -143,6 +143,7 @@ export class TamaStore {
       inputTokens: tokens?.inputTokens ?? 0,
       outputTokens: tokens?.outputTokens ?? 0,
       estimatedCostUsd: tokens?.estimatedCostUsd ?? 0,
+      estimatedCredits: tokens?.estimatedCredits,
       copilotCredits: tokens?.copilotCredits,
       tokensReal: tokens ? !tokens.estimated : false,
       contextBreakdown: tokens?.contextBreakdown,
@@ -171,6 +172,7 @@ export class TamaStore {
       outputTokens: event.outputTokens,
       costUsd: event.estimatedCostUsd,
       credits: event.copilotCredits ?? 0,
+      estCredits: tokens?.estimatedCredits ?? 0,
       delta: resp.delta,
     });
     if (this.data.records.length > MAX_RECORDS) this.data.records.shift();
@@ -208,6 +210,7 @@ export class TamaStore {
       inputTokens: tokens?.inputTokens ?? 0,
       outputTokens: tokens?.outputTokens ?? 0,
       estimatedCostUsd: tokens?.estimatedCostUsd ?? 0,
+      estimatedCredits: tokens?.estimatedCredits,
       copilotCredits: tokens?.copilotCredits,
       tokensReal: false,
       contextBreakdown: tokens?.contextBreakdown,
@@ -250,6 +253,7 @@ export class TamaStore {
       gridGramsCo2PerKwh: cfg.get<number>('gridGramsCo2PerKwh', 400),
       co2GramsPer1kTokens: impactCfg.get<number>('co2GramsPer1kTokens', 0.11),
       waterMlPer1kTokens: impactCfg.get<number>('waterMlPer1kTokens', 2),
+      usdPerCredit: impactCfg.get<number>('usdPerCredit', 0),
     });
 
     return {

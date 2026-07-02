@@ -25,31 +25,32 @@ function equivalent(tokens: number): string {
 }
 
 /**
- * The headline showcase: what your prompting actually costs — in dollars, carbon,
- * and water — with the share attributable to avoidable waste called out beneath.
+ * The headline showcase, anchored on MEASURED units. Tokens and Copilot credits
+ * (AICs) are what Copilot actually meters; dollars are a derived estimate shown
+ * only when the org configures its AIC→$ rate. Carbon/water are labelled estimates.
  */
 export function ImpactTrio({ metrics }: { metrics: SuccessMetrics }) {
   const tiles = [
     {
+      key: 'tokens',
+      icon: '🔢',
+      label: 'Tokens',
+      value: fmtNum(metrics.totalTokens),
+      waste: '',
+    },
+    {
+      key: 'credits',
+      icon: '🎫',
+      label: metrics.totalCreditsEstimated ? 'AICs (est.)' : 'AICs',
+      value: fmtNum(metrics.totalCredits),
+      waste: `${fmtNum(metrics.creditsWasted)} wasted`,
+    },
+    {
       key: 'cost',
       icon: '💵',
-      label: 'Cost',
-      value: fmtUsd(metrics.totalCostUsd),
-      waste: fmtUsd(metrics.costUsdWasted),
-    },
-    {
-      key: 'co2',
-      icon: '🔥',
-      label: 'CO₂e',
-      value: fmtGrams(metrics.co2eGramsTotal),
-      waste: fmtGrams(metrics.co2eGramsWasted),
-    },
-    {
-      key: 'water',
-      icon: '💧',
-      label: 'Water',
-      value: fmtWater(metrics.waterMlTotal),
-      waste: fmtWater(metrics.waterMlWasted),
+      label: metrics.hasUsdRate ? 'Cost (est.)' : 'Cost',
+      value: metrics.hasUsdRate ? fmtUsd(metrics.totalCostUsd) : 'set $/AIC',
+      waste: metrics.hasUsdRate ? `${fmtUsd(metrics.costUsdWasted)} wasted` : '',
     },
   ];
 
@@ -61,12 +62,13 @@ export function ImpactTrio({ metrics }: { metrics: SuccessMetrics }) {
             <div class="impact-icon">{t.icon}</div>
             <div class="impact-value">{t.value}</div>
             <div class="impact-label">{t.label}</div>
-            <div class="impact-waste">{t.waste} wasted</div>
+            {t.waste && <div class="impact-waste">{t.waste}</div>}
           </div>
         ))}
       </div>
       <div class="impact-equiv">
-        ≈ {equivalent(metrics.totalTokens)} · {fmtNum(metrics.totalTokens)} tokens
+        ≈ {equivalent(metrics.totalTokens)} · {fmtGrams(metrics.co2eGramsTotal)} CO₂e ·{' '}
+        {fmtWater(metrics.waterMlTotal)} (est.)
       </div>
     </section>
   );

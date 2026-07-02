@@ -18,6 +18,8 @@ export interface ScoredEventView {
   inputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number;
+  /** Estimated Copilot credits (AICs) for this turn. */
+  estimatedCredits?: number;
   /** Real Copilot credits for this turn, when read from disk. */
   copilotCredits?: number;
   /** True when token counts are real (from chatSessions), not estimated. */
@@ -106,6 +108,12 @@ export interface SuccessMetrics {
   totalCostUsd: number;
   /** Sum of real Copilot credits across the session (0 if none were real). */
   totalCredits: number;
+  /** Credits (AICs) attributable to wasteful prompting. */
+  creditsWasted: number;
+  /** True when totalCredits is estimated (no real metered credits yet). */
+  totalCreditsEstimated: boolean;
+  /** True when a USD-per-credit rate is configured (so $ figures are meaningful). */
+  hasUsdRate: boolean;
   /** Absolute CO2e footprint of all tokens this session (grams). */
   co2eGramsTotal: number;
   /** Absolute water footprint of all tokens this session (millilitres). */

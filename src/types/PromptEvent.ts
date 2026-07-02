@@ -43,6 +43,8 @@ export interface TokenEstimate {
   outputTokens: number;
   cachedTokens?: number;
   estimatedCostUsd: number;
+  /** Estimated Copilot credits (AICs) for the turn — the objective cost unit. */
+  estimatedCredits?: number;
   /** Real Copilot credits metered for the turn, when available from disk. */
   copilotCredits?: number;
   estimated: boolean;

@@ -1,5 +1,6 @@
 import type { SuccessMetrics } from '../webview/contract';
 import { footprint, type ImpactFactors } from './impact';
+import { creditsToUsd } from '@tokentama/scoring-engine';
 
 /** One scored prompt, reduced to the numbers the metrics need. */
 export interface ScoredRecord {
@@ -11,6 +12,8 @@ export interface ScoredRecord {
   outputTokens: number;
   costUsd: number;
   credits: number;
+  /** Estimated credits (AICs) from real model rates — used when no real credits. */
+  estCredits: number;
   delta: number;
 }
 
@@ -26,6 +29,8 @@ export interface SustainabilityConfig {
   co2GramsPer1kTokens: number;
   /** Millilitres of water per 1,000 tokens (headline impact). */
   waterMlPer1kTokens: number;
+  /** Dollars per Copilot credit (AIC). 0 = don't show a $ estimate. */
+  usdPerCredit: number;
 }
 
 function avg(nums: number[]): number {
@@ -72,8 +77,13 @@ export function computeMetrics(
   const sustainabilityCo2eGrams = (sustainabilityWhSaved / 1000) * sustain.gridGramsCo2PerKwh;
 
   const totalTokens = records.reduce((a, r) => a + r.inputTokens + r.outputTokens, 0);
-  const totalCostUsd = records.reduce((a, r) => a + r.costUsd, 0);
-  const totalCredits = records.reduce((a, r) => a + (r.credits ?? 0), 0);
+  const totalRealCredits = records.reduce((a, r) => a + (r.credits ?? 0), 0);
+  // Objective cost basis: real metered credits when present, else estimated from
+  // the model's real per-1M rates. Dollars are a derived, configurable estimate.
+  const billed = (r: ScoredRecord): number => (r.credits > 0 ? r.credits : r.estCredits);
+  const totalCredits = records.reduce((a, r) => a + billed(r), 0);
+  const totalCreditsEstimated = totalRealCredits === 0;
+  const hasUsdRate = sustain.usdPerCredit > 0;
 
   const factors: ImpactFactors = {
     co2GramsPer1kTokens: sustain.co2GramsPer1kTokens,
@@ -86,7 +96,9 @@ export function computeMetrics(
     0,
   );
   const wastedFootprint = footprint(wastedTokens, factors);
-  const costUsdWasted = records.reduce((a, r) => a + r.costUsd * wasteFraction(r.wasteScore), 0);
+  const creditsWasted = records.reduce((a, r) => a + billed(r) * wasteFraction(r.wasteScore), 0);
+  const totalCostUsd = creditsToUsd(totalCredits, sustain.usdPerCredit);
+  const costUsdWasted = creditsToUsd(creditsWasted, sustain.usdPerCredit);
 
   return {
     tokenReductionPct,
@@ -102,6 +114,9 @@ export function computeMetrics(
     totalTokens,
     totalCostUsd,
     totalCredits,
+    creditsWasted,
+    totalCreditsEstimated,
+    hasUsdRate,
     co2eGramsTotal: totalFootprint.co2eGrams,
     waterMlTotal: totalFootprint.waterMl,
     co2eGramsWasted: wastedFootprint.co2eGrams,
