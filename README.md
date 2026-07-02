@@ -1,27 +1,40 @@
 # 🐣 Tokentama
 
-> A friendly VS Code sidebar buddy that shows you — in plain dollars, carbon, and water — what your AI prompts actually cost, and helps you write leaner ones. Prompt well and your little pet's world thrives; waste tokens and it wilts.
+> A friendly VS Code sidebar buddy that helps you **spend fewer tokens on AI coding** — by fixing your prompts for you, in your own style, before you send them. It shows what each prompt really costs (tokens, Copilot credits, optionally dollars) and keeps a little pet whose world thrives when you prompt well and wilts when you waste tokens.
 
 ---
 
 ## 🌟 In one minute
 
-Every time you chat with an AI coding assistant (like GitHub Copilot), your words are turned into **tokens**, and tokens aren't free — they cost **money**, burn **energy** (carbon), and even use **water** to cool the data centres.
+Every time you chat with an AI coding assistant (like GitHub Copilot), your words become **tokens** — and tokens cost **money** (metered as Copilot **AI credits**), burn **energy**, and even use **water** to cool the data centres.
 
-Most of that cost is invisible. **Tokentama makes it visible.** It lives in your VS Code sidebar as a tiny **Clippy-style pet in a little world**:
+**Tokentama's job is to lower that bill without you having to think about it.** Draft a prompt in its sidebar, and it:
 
-- 🟢 Write **clear, lean prompts** → the sun shines, the lake fills, and Clippy sprints around happily.
-- 🔴 **Waste tokens** (repeat yourself, ramble, stay vague) → the lake dries up, the sky greys over, and Clippy slows down… and eventually keels over.
+- ✍️ **Rewrites it in your style** using *your own Copilot model* — a clearer, self-contained prompt that lands the right result on the first try, so you stop paying for retries and rambling.
+- 🔢 **Scores each prompt 0–100** for efficiency and shows exactly what wasted the tokens (duplication, vagueness, verbosity).
+- 💠 **Makes the cost visible** in tokens, Copilot AI credits (AICs), and — if you opt in — dollars, with the wasted share called out.
+- 🐣 **Keeps a Clippy-style pet** whose little world greens up when you prompt leanly and dries out when you don't — a gentle nudge to build the habit.
 
-Alongside the pet, you get a **TokenScore** for each prompt, the **real cost** in 💵 / 🔥 / 💧, a tiny **coach** that rewrites weak prompts for you, and a peek at the **live data** we read from your Copilot session.
-
-> 💡 **Want to see it instantly?** Open the Tokentama sidebar and click **▶ Demo** — it plays a short story that walks Clippy from a thriving world all the way down to a dormant one and back.
+The goal is for token-efficient prompting to become **second nature** — because Tokentama fixes the prompt for you instead of asking you to learn.
 
 ---
 
 ## 🧭 What you see (a tour of the dashboard)
 
 The dashboard is a single, no-scroll panel. Here's each piece — what it means for *you*, and (for the curious) exactly how it works.
+
+### ✍️ Compose & rewrite — the heart of Tokentama
+
+**Draft your prompt in the Compose box** and it's scored live as you type (offline, instant, zero tokens). One tap on **✨ Rewrite in my style** hands it to **your own Copilot model** (no API key) and returns a **fixed, self-contained prompt** — clear target, explicit output, every detail you gave preserved, filler gone — that's more likely to land the right result on the *first* try. **Use rewrite** copies it straight into Copilot; **Copy as-is** sends your original.
+
+<details>
+<summary><b>Under the hood — the rewriter</b></summary>
+
+- **Your Copilot model, no key.** Rewrites use VS Code's Language Model API (`vscode.lm`) with your own Copilot entitlement. The first use asks your permission; if the model is unavailable it falls back to a deterministic offline cleanup. Every attempt is logged to the **Tokentama** output channel, and the rewrite card labels its source — *your Copilot model* or *offline* — so you can see it working.
+- **In your style.** Rewrites are few-shot-conditioned on your own past prompt→rewrite pairs (a local corpus) plus a compact personal profile, so they sound like you.
+- **Honest about savings.** The rewrite's job is to *fix* the ask — it may be shorter, the same, or longer. Token savings are only claimed when it's genuinely shorter; otherwise it's shown as a sharper first-try prompt. It never invents file names, APIs, or requirements you didn't give.
+- **Modes:** `off` · `offline` (zero-token cleanup) · `auto` (your Copilot model, default) · `llm` (an external provider). See `tokentama.rewriter.*`.
+</details>
 
 ### 🪴 Your pet & its world
 
@@ -74,21 +87,17 @@ Design choices that make the score **stable and trustworthy**:
 Five internal sub-dimensions (`promptQuality`, `contextEfficiency`, `toolEfficiency`, `outputEfficiency`, `learningAdoption`) are still computed and available in the data model for deeper analysis.
 </details>
 
-### 💵 🔥 💧 Real-world impact
+### � Real impact — tokens, credits, and (optionally) dollars
 
-Three tiles show what your session has actually cost — in **dollars, grams of CO₂, and millilitres of water** — with the share that was **wasted** (caused by inefficiency) called out beneath each. A caption translates the total into something relatable, like *"≈ an afternoon of chat with my repo."*
+Three tiles show what your session actually spent: **tokens**, **Copilot AI credits (AICs)** — the unit Copilot really meters — and, if you opt in, an estimated **dollar** cost. Beneath each, the share that was **wasted** (caused by inefficiency) is called out, tied directly to your TokenScore. Environmental impact (CO₂ / water) remains available for the sustainability-minded.
 
 <details>
-<summary><b>Under the hood — the conversion factors & sources</b></summary>
+<summary><b>Under the hood — why AICs, and where the numbers come from</b></summary>
 
-Footprint is computed from token counts using a simple linear model:
-
-- **CO₂:** `0.11 g` per 1,000 tokens (≈ 110 g per 1M)
-- **Water:** `2 mL` per 1,000 tokens (≈ 2 L per 1M)
-- **Dollars:** the **real per-model price** Copilot ships in its `models.json` (not a generic estimate)
-- **Wasted portion:** `Σ (tokens × wasteScore%)` per prompt → converted to footprint, so the "wasted" figure is tied directly to your TokenScore.
-
-Both environmental factors are configurable (`tokentama.impact.*`). The defaults follow published per-token estimates (Antarctica.io One-Token Model · UC Riverside · Lawrence Berkeley National Lab · *"How Hungry is AI?"*, arXiv 2025).
+- **Tokens & AICs are the measured units.** Copilot bills in AI credits, so we read the **real per-model prices** from its `models.json` (`token_prices.default`), not a generic estimate. Token counts are read from your on-disk chat sessions when metered, or estimated with a tokenizer otherwise (a badge tells you which).
+- **Dollars are optional and never guessed.** A `$` figure only appears if you set `tokentama.impact.usdPerCredit` to your org's internal $/AIC rate; otherwise Tokentama shows tokens + AICs and hides `$`, keeping the headline honest.
+- **Wasted portion:** `Σ (tokens × wasteScore%)` per prompt → so the "wasted" figure is tied directly to your score.
+- **Environmental estimates** (CO₂ `0.11 g` and water `2 mL` per 1,000 tokens) are configurable under `tokentama.impact.*` / `tokentama.sustainability.*`, following published per-token estimates (UC Riverside · Lawrence Berkeley National Lab · *"How Hungry is AI?"*, arXiv 2025).
 </details>
 
 ### 📊 Live Copilot data
@@ -104,22 +113,22 @@ Proof that this isn't guesswork — a compact strip shows the **actual data we r
 - The **real / estimated** badge reflects whether counts were read from Copilot's on-disk session data or estimated with a tokenizer.
 </details>
 
-### 🧑‍🏫 Coaching
+### 🧑‍🏫 Coaching & insights
 
-When a prompt is weak, you get a **one-line tip** and a **cleaned-up rewrite** you can copy straight into Copilot. The rewrite strips filler, removes duplication, and adds the missing structure (a clear target, an output format, a size limit).
+Alongside the rewrite, Tokentama surfaces **just-in-time nudges** — a one-line tip, a retry-risk warning, or a hint to name the file/function you mean — and, in an expandable **insights** section, shows **where your tokens go** (system vs. tools vs. your message), your **net savings** from adopting rewrites, model **right-sizing** advice, and a strip of your **recent prompts** so nothing scrolls out of view.
 
 <details>
-<summary><b>Under the hood — offline by default, LLM optional</b></summary>
+<summary><b>Under the hood — offline by default, your Copilot model on request</b></summary>
 
-- **Heuristic coach (default, offline, no network):** deterministically rewrites the prompt — de-duplicates sentences, strips politeness/retry filler, then appends only the lines that address the detected problems (Target / Output / Limit / Context / Since-last-try).
-- **LLM coach (optional):** if you configure a provider and key (see settings), tips and rewrites come from your chosen model, falling back to the heuristic coach on any error so coaching never breaks.
+- **Heuristic coach (default, offline, no network):** deterministically cleans the prompt — de-duplicates sentences, strips politeness/retry filler — and names the concrete issue it found (Target / Output / Limit / Context).
+- **Model rewrite (on request):** the **Rewrite in my style** action uses your own Copilot model via VS Code's Language Model API, falling back to the offline cleanup on any error so it never breaks. An external provider can be configured under `tokentama.coaching.*` if you prefer.
 </details>
 
 ---
 
-## 🎬 The Demo button
+## 🎬 See every state — the demo
 
-Click **▶ Demo** to watch a scripted story play out: seven prompts, from a pristine one-liner down to a catastrophic re-paste-and-retry mess, then a clean recovery — so you can see Clippy move through **every** world state in about ten seconds.
+Run **Tokentama: Run Tokentama demo** from the Command Palette to watch a scripted story play out: seven prompts, from a pristine one-liner down to a catastrophic re-paste-and-retry mess, then a clean recovery — so you can see Clippy move through **every** world state in about ten seconds.
 
 <details>
 <summary><b>Under the hood</b></summary>
@@ -131,18 +140,19 @@ Each demo step is **really scored** (so the quality bars, reasons, coaching, and
 
 ## 🎣 How it reads your prompts
 
-There are **three ways** to get a prompt scored — pick whatever fits your flow:
+There are a few ways to get a prompt scored (and rewritten) — pick whatever fits your flow:
 
-1. **Type `@tokentama`** in Copilot Chat followed by your prompt — instant, explicit scoring.
-2. **Click "Score a prompt"** (or run the command) and paste/select any text.
-3. **Let it watch passively** — it quietly reads your Copilot chat sessions and scores them as you go (read-only; it never changes anything).
+1. **Draft in the Compose box** — score it live as you type and rewrite it in your style before you send it (the main flow).
+2. **Type `@tokentama`** in Copilot Chat followed by your prompt — instant, explicit scoring.
+3. **Click "Score a prompt"** (or run the command) and paste/select any text.
+4. **Let it watch passively** — it quietly reads your Copilot chat sessions and scores them as you go (read-only; it never changes anything).
 
 <details>
 <summary><b>Under the hood — capture details & privacy</b></summary>
 
 - **Chat participant:** `@tokentama` is a registered VS Code chat participant.
 - **Manual:** the **Score this prompt** command scores editor text or pasted input.
-- **Passive watcher:** reads VS Code's Copilot chat transcripts on disk (`…/workspaceStorage/<hash>/GitHub.copilot-chat/…`). It is **read-only**, scoped to the current window's workspace, and best-effort (the on-disk format is undocumented). Use **Scan recent Copilot prompts** to score the last few on demand, and **Show capture diagnostics** to see exactly what it's reading.
+- **Passive watcher:** reads VS Code's Copilot chat transcripts on disk (`…/workspaceStorage/<hash>/GitHub.copilot-chat/…`). It is **read-only** and best-effort (the on-disk format is undocumented). By default it tracks **every** Copilot chat across your windows (`tokentama.capture.scope: all`) so it just works as one app; set it to `window` to scope to the current workspace only. Use **Scan recent Copilot prompts** to score the last few on demand, and **Capture self-test** to see exactly what it's reading.
 
 Everything stays **on your machine**. Nothing is sent anywhere unless you explicitly turn on an LLM coaching provider.
 </details>
@@ -176,29 +186,44 @@ Open the Command Palette (`Ctrl/Cmd+Shift+P`) and search **Tokentama**:
 | --- | --- |
 | **Score this prompt** | Score pasted/selected text on demand |
 | **Open Tokentama dashboard** | Reveal the sidebar dashboard |
-| **Run Tokentama demo** | Play the all-states demo (also the ▶ Demo button) |
-| **Scan recent Copilot prompts** | Score your last few real Copilot prompts now |
 | **Toggle passive capture** | Turn automatic Copilot watching on/off |
-| **Reset ecosystem** | Start the pet's world fresh |
+| **Reset ecosystem** | Start the pet's world fresh (asks to confirm) |
+| **Scan recent Copilot prompts** | Score your last few real Copilot prompts now |
 | **Show capture diagnostics** | See what the passive watcher is reading |
-| **Set coaching LLM API key** | Store an LLM key securely (SecretStorage) |
+| **Capture self-test (what is it reading?)** | Verify capture end-to-end and print what it found |
+| **Run Tokentama demo** | Play the all-states demo |
+| **Set coaching LLM API key** | Store an external LLM key securely (SecretStorage) |
+| **Export pilot data (JSON + CSV)** | Export local pilot metrics for a study |
+| **Ingest Copilot history into corpus** | Seed your rewrite corpus from past chats |
+| **Export training corpus (JSONL)** | Export your local prompt→rewrite pairs |
+| **Compact session (fresh chat + summary)** | Start a fresh chat with a compact summary to cut context |
 
 ### Settings
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `tokentama.passiveCapture.enabled` | `true` | Passively read Copilot chat sessions (read-only, experimental) |
-| `tokentama.coaching.llmProvider` | `none` | `none` = offline heuristic coach; `openai` / `azure-openai` = use an LLM |
-| `tokentama.coaching.endpoint` | `""` | LLM endpoint URL |
-| `tokentama.coaching.model` | `gpt-4o-mini` | Model / deployment name |
+| `tokentama.rewriter.mode` | `auto` | How **Rewrite in my style** works: `off` · `offline` (zero-token cleanup) · `auto` (your Copilot model) · `llm` (external provider) |
+| `tokentama.rewriter.model` | `""` | Model/deployment for `llm`-mode rewrites (empty = use the coaching model) |
+| `tokentama.rewriter.fewShotK` | `3` | How many similar past rewrites from your corpus to use as style examples |
+| `tokentama.capture.scope` | `all` | `all` = track every Copilot chat across windows; `window` = current workspace only |
+| `tokentama.capture.mode` | `hybrid` | `hybrid` (live + on-disk reconciliation) · `event` · `disk` |
+| `tokentama.impact.usdPerCredit` | `0` | Your org's $ per Copilot AI credit. `0` hides `$` and shows tokens + AICs |
+| `tokentama.coaching.llmProvider` | `none` | `none` = offline heuristic; `openai` / `azure-openai` = external LLM for tips |
+| `tokentama.coaching.endpoint` | `""` | External LLM endpoint URL |
+| `tokentama.coaching.model` | `gpt-4o-mini` | External model / deployment name |
+| `tokentama.corpus.enabled` | `true` | Record prompt→rewrite pairs to a **local** corpus (used to personalize rewrites) |
+| `tokentama.corpus.storeRawText` | `true` | Store raw text in the local corpus (off = hashes only) |
 | `tokentama.impact.co2GramsPer1kTokens` | `0.11` | Grams of CO₂ per 1,000 tokens (headline impact) |
 | `tokentama.impact.waterMlPer1kTokens` | `2` | Millilitres of water per 1,000 tokens (headline impact) |
 | `tokentama.sustainability.whPerThousandTokens` | `0.4` | Watt-hours per 1,000 tokens (energy-saved estimate) |
 | `tokentama.sustainability.gridGramsCo2PerKwh` | `400` | Grid carbon intensity (gCO₂e/kWh) |
+| `tokentama.telemetry.enabled` | `false` | Collect local, anonymized pilot telemetry (nothing leaves your machine) |
+
+> Health tuning (`tokentama.health.*`) and the legacy `tokentama.passiveCapture.enabled` toggle are also available for fine-tuning; see the Settings UI (search “Tokentama”).
 
 ### 🔒 Privacy in one line
 
-Your prompts, scores, and history are stored **locally** in extension storage; passive capture is **read-only**; **nothing leaves your machine** unless you configure an LLM coaching provider.
+Your prompts, scores, and history are stored **locally** in extension storage; passive capture is **read-only**; **nothing leaves your machine** except when you ask for a rewrite (which uses your own Copilot model through VS Code) or configure an external LLM provider.
 
 ---
 
@@ -209,19 +234,23 @@ Your prompts, scores, and history are stored **locally** in extension storage; p
 
 ```
 src/                         # extension host (Node)
-├─ extension.ts              # activation: view, status bar, commands, watcher, @tokentama
-├─ capture/                  # Copilot session reader + file watcher + parsers
-├─ core/scoreService.ts      # score → coach → persist pipeline (+ the demo runner)
-├─ scoring/                  # waste detectors, subscores, pet-state machine, token/cost model
-├─ coaching/                 # heuristic + optional LLM coach
+├─ extension.ts              # activation: view, status bar, commands, watcher, @tokentama, LM rewrite
+├─ capture/                  # Copilot session reader + multi-session file watcher + parsers
+├─ core/scoreService.ts      # score → coach → persist pipeline (+ compose scoring, corpus ingest, demo)
+├─ rewriter/                 # RewriteService + corpus retrieval (few-shot, style-matched rewrites)
+├─ analysis/                 # context breakdown, retry-risk, outcomes, right-sizing, portfolio
+├─ scoring/                  # waste detectors, subscores, pet-state machine, token/credit model
+├─ coaching/                 # heuristic + optional LLM coach (leanRewrite, tips)
+├─ data/corpusStore.ts       # on-device prompt→rewrite corpus
 ├─ metrics/                  # metrics.ts (session aggregation) + impact.ts (CO₂/water footprint)
-├─ state/tamaStore.ts        # persisted pet state (globalState), smoothed health
+├─ state/tamaStore.ts        # persisted pet state (globalState), smoothed health, recent events
 ├─ status/                   # status-bar indicator
 ├─ types/                    # shared domain contracts
 └─ webview/                  # webview provider + HTML/CSP + host↔webview message contract
 
 webview-ui/src/              # Preact dashboard
-└─ components/               # PetStage, ScoreHeader, ImpactTrio, LiveData, QualityBars, CoachingPanel
+└─ components/               # PetStage, ScoreHeader, RecentStrip, ComposeBox, ImpactTrio,
+                             # ContextPanel, OutcomesPanel, RightSizePanel, CoachingPanel, LiveData
 ```
 </details>
 
