@@ -594,14 +594,6 @@ body {
   color: var(--vscode-descriptionForeground);
 }
 
-.sparkline {
-  width: 120px;
-  height: 24px;
-  opacity: 0.85;
-  margin-left: auto;
-  color: var(--vscode-charts-blue, #539bf5);
-}
-
 /* ---------- Preliminary "still calculating" note ---------- */
 .calc-note {
   display: flex;

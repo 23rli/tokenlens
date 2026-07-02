@@ -1,24 +1,7 @@
 import type { TamaState } from '../../../src/webview/contract';
 
-function sparkline(points: number[]): string {
-  if (points.length < 2) return '';
-  const w = 120;
-  const h = 28;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const span = max - min || 1;
-  return points
-    .map((p, i) => {
-      const x = (i / (points.length - 1)) * w;
-      const y = h - ((p - min) / span) * h;
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`;
-    })
-    .join(' ');
-}
-
 export function ScoreHeader({ state }: { state: TamaState }) {
   const delta = state.lastEvent?.delta ?? 0;
-  const trend = state.history.map((h) => h.overallScore);
   const deltaClass = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
   const health = Math.max(0, Math.min(100, Math.round(state.health)));
   const healthClass = health >= 60 ? 'high' : health >= 30 ? 'mid' : 'low';
@@ -52,11 +35,6 @@ export function ScoreHeader({ state }: { state: TamaState }) {
           <span class="metric-num metric-waste">{Math.round(state.wasteScore)}</span>
           <span class="metric-label">waste</span>
         </div>
-        {trend.length >= 2 && (
-          <svg viewBox="0 0 120 28" class="sparkline" preserveAspectRatio="none">
-            <path d={sparkline(trend)} fill="none" stroke="currentColor" stroke-width="2" />
-          </svg>
-        )}
       </div>
 
       {preliminary && (
