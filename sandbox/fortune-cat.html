@@ -161,6 +161,73 @@
   .limb-out{ fill:none; stroke:#ecdcc2; stroke-width:48; stroke-linecap:round; }
   .limb{ fill:none; stroke:#fff; stroke-width:42; stroke-linecap:round; }
 
+  /* gentle breathing of the whole cat */
+  .cat{ animation:breathe 3.4s ease-in-out infinite; }
+  @keyframes breathe{
+    0%,100%{ transform:translateY(0) scale(1); }
+    50%    { transform:translateY(-6px) scale(1.012); }
+  }
+
+  /* blinking eyes */
+  #eyes{
+    transform-box:view-box;
+    transform-origin:180px 150px;
+    animation:blink 4.6s ease-in-out infinite;
+  }
+  @keyframes blink{
+    0%,92%,100%{ transform:scaleY(1); }
+    95%        { transform:scaleY(.08); }
+    97%        { transform:scaleY(1); }
+  }
+
+  /* swishing tail */
+  #tail{
+    transform-box:view-box;
+    transform-origin:282px 372px;
+    animation:tailSwish 2.6s ease-in-out infinite;
+  }
+  #tail.excited{ animation-duration:.85s; }
+  @keyframes tailSwish{
+    0%,100%{ transform:rotate(-9deg); }
+    50%    { transform:rotate(11deg); }
+  }
+  .tail-out{ fill:none; stroke:#ecdcc2; stroke-width:30; stroke-linecap:round; }
+  .tail{ fill:none; stroke:#fff; stroke-width:24; stroke-linecap:round; }
+  .tail-tip{ fill:none; stroke:#fff7ea; stroke-width:24; stroke-linecap:round; }
+
+  /* twitching ears */
+  #earL{ transform-box:view-box; transform-origin:130px 84px; animation:earTwitchL 5.5s ease-in-out infinite; }
+  #earR{ transform-box:view-box; transform-origin:230px 84px; animation:earTwitchR 6.3s ease-in-out infinite; }
+  @keyframes earTwitchL{ 0%,86%,100%{ transform:rotate(0); } 90%{ transform:rotate(-8deg); } 94%{ transform:rotate(0); } }
+  @keyframes earTwitchR{ 0%,80%,100%{ transform:rotate(0); } 85%{ transform:rotate(8deg); } 90%{ transform:rotate(0); } }
+
+  /* dangling bell */
+  #bell{
+    transform-box:view-box;
+    transform-origin:180px 224px;
+    animation:bellSwing 1.15s ease-in-out infinite;
+  }
+  @keyframes bellSwing{
+    0%,100%{ transform:rotate(6deg); }
+    50%    { transform:rotate(-6deg); }
+  }
+
+  /* twinkling sparkles */
+  .sparkle{
+    position:absolute;
+    width:16px; height:16px;
+    background:radial-gradient(circle at 50% 50%, #fff, #ffd76b 70%);
+    clip-path:polygon(50% 0,60% 40%,100% 50%,60% 60%,50% 100%,40% 60%,0 50%,40% 40%);
+    filter:drop-shadow(0 0 4px rgba(255,220,130,.85));
+    opacity:0;
+    pointer-events:none;
+    animation:twinkle 3s ease-in-out infinite;
+  }
+  @keyframes twinkle{
+    0%,100%{ opacity:0; transform:scale(.3) rotate(0deg); }
+    50%    { opacity:1; transform:scale(1) rotate(45deg); }
+  }
+
   /* floating coins layer */
   .coin-layer{ position:absolute; inset:0; pointer-events:none; overflow:visible; }
   .coin{
@@ -237,12 +304,25 @@
     <div class="stage">
       <div class="coin-layer" id="coinLayer"></div>
 
+      <span class="sparkle" style="left:14%; top:24%; width:14px; height:14px; animation-delay:0s;"></span>
+      <span class="sparkle" style="left:82%; top:18%; width:18px; height:18px; animation-delay:.7s;"></span>
+      <span class="sparkle" style="left:76%; top:58%; width:12px; height:12px; animation-delay:1.5s;"></span>
+      <span class="sparkle" style="left:18%; top:60%; width:16px; height:16px; animation-delay:2.1s;"></span>
+      <span class="sparkle" style="left:50%; top:8%;  width:12px; height:12px; animation-delay:1.1s;"></span>
+
       <div class="cat-wrap" id="cat" role="button" aria-label="Tap the lucky cat for a fortune" tabindex="0">
         <svg class="cat" viewBox="0 0 360 430" xmlns="http://www.w3.org/2000/svg">
           <!-- ground shadow + cushion -->
           <ellipse class="shadow" cx="180" cy="424" rx="140" ry="18" />
           <ellipse class="cushion" cx="180" cy="412" rx="150" ry="32" />
           <ellipse class="cushion-dark" cx="180" cy="418" rx="150" ry="22" />
+
+          <!-- swishing tail (behind the body) -->
+          <g id="tail">
+            <path class="tail-out" d="M282,372 C340,372 356,318 334,272 C324,250 342,236 350,248" />
+            <path class="tail"     d="M282,372 C340,372 356,318 334,272 C324,250 342,236 350,248" />
+            <path class="tail-tip" d="M334,272 C324,250 342,236 350,248" />
+          </g>
 
           <!-- body -->
           <path class="fur" d="M86,200 C58,250 60,360 96,398 C128,430 232,430 264,398
@@ -262,19 +342,25 @@
           <circle class="fur" cx="180" cy="150" r="92" />
 
           <!-- ears -->
-          <path class="fur" d="M104,92 L116,38 L168,80 Z" />
-          <path class="ear-in" d="M120,82 L128,52 L154,78 Z" />
-          <path class="fur" d="M256,92 L244,38 L192,80 Z" />
-          <path class="ear-in" d="M240,82 L232,52 L206,78 Z" />
+          <g id="earL">
+            <path class="fur" d="M104,92 L116,38 L168,80 Z" />
+            <path class="ear-in" d="M120,82 L128,52 L154,78 Z" />
+          </g>
+          <g id="earR">
+            <path class="fur" d="M256,92 L244,38 L192,80 Z" />
+            <path class="ear-in" d="M240,82 L232,52 L206,78 Z" />
+          </g>
 
           <!-- face -->
           <path class="whisker" d="M118,166 L70,156 M118,178 L66,178 M118,190 L70,200" />
           <path class="whisker" d="M242,166 L290,156 M242,178 L294,178 M242,190 L290,200" />
 
-          <ellipse class="eye" cx="146" cy="150" rx="11" ry="17" />
-          <ellipse class="eye" cx="214" cy="150" rx="11" ry="17" />
-          <circle class="glint" cx="142" cy="143" r="4" />
-          <circle class="glint" cx="210" cy="143" r="4" />
+          <g id="eyes">
+            <ellipse class="eye" cx="146" cy="150" rx="11" ry="17" />
+            <ellipse class="eye" cx="214" cy="150" rx="11" ry="17" />
+            <circle class="glint" cx="142" cy="143" r="4" />
+            <circle class="glint" cx="210" cy="143" r="4" />
+          </g>
 
           <ellipse class="blush" cx="124" cy="182" rx="13" ry="8" />
           <ellipse class="blush" cx="236" cy="182" rx="13" ry="8" />
@@ -284,9 +370,11 @@
 
           <!-- collar + bell -->
           <path class="collar" d="M120,212 Q180,250 240,212" />
-          <circle class="bell" cx="180" cy="236" r="15" />
-          <path class="bell-line" d="M166,234 H194" />
-          <circle class="bell" cx="180" cy="240" r="3" />
+          <g id="bell">
+            <circle class="bell" cx="180" cy="236" r="15" />
+            <path class="bell-line" d="M166,234 H194" />
+            <circle class="bell" cx="180" cy="240" r="3" />
+          </g>
 
           <!-- the swinging / beckoning arm (drawn on top) -->
           <g id="arm">
@@ -315,6 +403,7 @@
 <script>
   const cat       = document.getElementById('cat');
   const arm       = document.getElementById('arm');
+  const tail      = document.getElementById('tail');
   const fortuneEl = document.getElementById('fortune');
   const coinsEl   = document.getElementById('coins');
   const coinLayer = document.getElementById('coinLayer');
@@ -393,10 +482,14 @@
 
   // --- the main "beckon" action ---
   function beckon(){
-    // quick excited wave
+    // quick excited wave + tail wag
     if (waving){
       arm.classList.add('excited');
-      setTimeout(() => arm.classList.remove('excited'), 1300);
+      tail.classList.add('excited');
+      setTimeout(() => {
+        arm.classList.remove('excited');
+        tail.classList.remove('excited');
+      }, 1300);
     }
 
     // new fortune

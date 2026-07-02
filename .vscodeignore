@@ -3,6 +3,8 @@
 src/**
 webview-ui/**
 scripts/**
+supplylens/**
+sandbox/**
 node_modules/**
 **/*.ts
 **/*.map
@@ -16,8 +18,10 @@ eslint.config.mjs
 .gitignore
 .npmrc
 .env.example
+*.vsix
 !dist/**
 !media/**
 !README.md
 !CHANGELOG.md
 !LICENSE
+dist/**/*.map

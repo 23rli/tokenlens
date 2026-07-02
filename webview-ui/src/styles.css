@@ -1068,6 +1068,39 @@ button.ghost:hover {
   font-size: 10px;
   color: var(--vscode-descriptionForeground);
 }
+
+/* ---------- Collapsible Insights section (declutter) ---------- */
+.insights {
+  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.25));
+  border-radius: 10px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
+}
+.insights > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--vscode-descriptionForeground);
+  user-select: none;
+}
+.insights > summary::-webkit-details-marker {
+  display: none;
+}
+.insights > summary::before {
+  content: '▸ ';
+}
+.insights[open] > summary::before {
+  content: '▾ ';
+}
+.insights-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 10px 10px;
+}
 .context-advisory {
   font-size: 11px;
   line-height: 1.4;

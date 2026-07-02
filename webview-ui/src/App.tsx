@@ -42,12 +42,17 @@ export function App() {
         <ScoreHeader state={state} />
         <ComposeBox result={compose} auto={auto} />
         <ImpactTrio metrics={state.metrics} />
-        <LiveData state={state} />
-        <ContextPanel lastEvent={state.lastEvent} model={state.model} />
-        <RightSizePanel lastEvent={state.lastEvent} model={state.model} />
-        <OutcomesPanel outcomes={state.outcomes} />
-        <QualityBars lastEvent={state.lastEvent} />
         <CoachingPanel tip={state.tip} lastEvent={state.lastEvent} />
+        <details class="insights">
+          <summary>Insights</summary>
+          <div class="insights-body">
+            <LiveData state={state} />
+            <ContextPanel lastEvent={state.lastEvent} model={state.model} />
+            <RightSizePanel lastEvent={state.lastEvent} model={state.model} />
+            <OutcomesPanel outcomes={state.outcomes} />
+            <QualityBars lastEvent={state.lastEvent} />
+          </div>
+        </details>
       </div>
 
       <div class="actions">

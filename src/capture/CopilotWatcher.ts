@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { join } from 'node:path';
 import type { PromptEvent } from '@tokentama/shared-types';
-import { findActiveSession, getWorkspaceStorageRoot, listCopilotSessions } from './copilotPaths';
+import { getWorkspaceStorageRoot, listCopilotSessions } from './copilotPaths';
 import { readSessionEvents } from './copilotReader';
 
 /**
@@ -21,10 +21,11 @@ export class CopilotWatcher implements vscode.Disposable {
   private watcher?: vscode.FileSystemWatcher;
   private readonly seen = new Set<string>();
   private readonly pendingSince = new Map<string, number>();
+  /** Last-seen mtime per session, so we only re-read a chat that actually changed. */
+  private readonly sessionMtimes = new Map<string, number>();
   private readonly root = getWorkspaceStorageRoot();
   private debounce?: ReturnType<typeof setTimeout>;
   private poll?: ReturnType<typeof setInterval>;
-  private lastMtime = 0;
 
   constructor(
     private readonly onEvent: (event: PromptEvent, meta?: { preliminary?: boolean }) => void,
@@ -41,13 +42,13 @@ export class CopilotWatcher implements vscode.Disposable {
 
   start(): void {
     // Mark existing in-scope turns as seen, so only turns that happen AFTER
-    // capture starts are emitted (no history replay).
+    // capture starts are emitted (no history replay, no stale first prompt).
     try {
       for (const session of listCopilotSessions(this.root, this.onlyHash)) {
         for (const ev of readSessionEvents(session)) {
           this.seen.add(`${ev.sessionId}:${ev.turnIndex}`);
         }
-        this.lastMtime = Math.max(this.lastMtime, session.modifiedMs);
+        this.sessionMtimes.set(session.sessionId, session.modifiedMs);
       }
     } catch {
       /* ignore */
@@ -73,44 +74,55 @@ export class CopilotWatcher implements vscode.Disposable {
   }
 
   private refresh(): void {
-    let active;
+    let sessions;
     try {
-      active = findActiveSession(this.root, this.onlyHash);
+      sessions = listCopilotSessions(this.root, this.onlyHash);
     } catch {
       return;
     }
-    if (!active) return;
-    // Process when the session changed OR while we're still waiting on a turn's
-    // real tokens (so the grace-period fallback below can fire even if idle).
-    const changed = active.modifiedMs > this.lastMtime;
-    if (!changed && this.pendingSince.size === 0) return;
-    if (changed) this.lastMtime = active.modifiedMs;
-
     const now = Date.now();
-    for (const ev of readSessionEvents(active)) {
-      if (!ev.promptText.trim()) continue;
-      const key = `${ev.sessionId}:${ev.turnIndex}`;
-      if (this.seen.has(key)) continue;
+    // Scan EVERY in-scope chat for new turns — not just the newest-mtime one — so
+    // we capture the chat the user actually typed in, even if another was touched.
+    for (const session of sessions) {
+      const prevMtime = this.sessionMtimes.get(session.sessionId) ?? 0;
+      const changed = session.modifiedMs > prevMtime;
+      const hasPending = [...this.pendingSince.keys()].some((k) =>
+        k.startsWith(`${session.sessionId}:`),
+      );
+      if (!changed && !hasPending) continue;
+      this.sessionMtimes.set(session.sessionId, session.modifiedMs);
 
-      // Prefer REAL metered tokens, but don't wait forever — emit with estimates
-      // after a short grace so the prompt always appears promptly.
-      const hasRealTokens = !(ev.tokens && ev.tokens.estimated);
-      if (!hasRealTokens) {
-        const since = this.pendingSince.get(key);
-        if (since === undefined) {
-          // First sight without final tokens: show a preliminary score immediately,
-          // then keep waiting for the real metered tokens to finalize it.
-          this.pendingSince.set(key, now);
-          this.onEvent(ev, { preliminary: true });
-          continue;
-        }
-        if (now - since < 3000) continue;
-        // Grace expired — fall through and finalize with estimated tokens.
+      let events;
+      try {
+        events = readSessionEvents(session);
+      } catch {
+        continue;
       }
+      for (const ev of events) {
+        if (!ev.promptText.trim()) continue;
+        const key = `${ev.sessionId}:${ev.turnIndex}`;
+        if (this.seen.has(key)) continue;
 
-      this.seen.add(key);
-      this.pendingSince.delete(key);
-      this.onEvent(ev, { preliminary: false });
+        // Prefer REAL metered tokens, but don't wait forever — emit with estimates
+        // after a short grace so the prompt always appears promptly.
+        const hasRealTokens = !(ev.tokens && ev.tokens.estimated);
+        if (!hasRealTokens) {
+          const since = this.pendingSince.get(key);
+          if (since === undefined) {
+            // First sight without final tokens: show a preliminary score immediately,
+            // then keep waiting for the real metered tokens to finalize it.
+            this.pendingSince.set(key, now);
+            this.onEvent(ev, { preliminary: true });
+            continue;
+          }
+          if (now - since < 3000) continue;
+          // Grace expired — fall through and finalize with estimated tokens.
+        }
+
+        this.seen.add(key);
+        this.pendingSince.delete(key);
+        this.onEvent(ev, { preliminary: false });
+      }
     }
   }
 
