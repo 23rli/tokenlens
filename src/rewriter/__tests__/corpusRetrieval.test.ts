@@ -28,8 +28,8 @@ describe('retrievePairs', () => {
 describe('buildRewriteMessages', () => {
   it('includes examples and the target prompt', () => {
     const { system, user } = buildRewriteMessages('Fix the thing.', pairs.slice(0, 1));
-    expect(system).toMatch(/FEWEST tokens/);
-    expect(system).toMatch(/KEEP every concrete detail/);
+    expect(system).toMatch(/FEWER tokens/);
+    expect(system).toMatch(/NEVER invent/);
     expect(user).toContain('parseEmail');
     expect(user).toContain('Fix the thing.');
   });

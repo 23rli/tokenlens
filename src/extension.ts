@@ -204,11 +204,13 @@ export function activate(context: vscode.ExtensionContext): void {
     scoreDraft: (text) => scoreService.scoreDraft(text),
     autoRewrite: async (text) => {
       const model = store.getState().model?.family;
-      const r = await rewriteService.rewrite({ promptText: text, model });      if (r.llmTokensSpent) store.addToolSpend(r.llmTokensSpent);      return {
+      const r = await rewriteService.rewrite({ promptText: text, model });
+      if (r.llmTokensSpent) store.addToolSpend(r.llmTokensSpent);
+      return {
         text,
         rewrittenPrompt: r.rewrittenPrompt,
         estimatedTokenReductionPct: r.estimatedTokenReductionPct,
-        clarified: r.clarified,
+        estimatedTokensSaved: r.estimatedTokensSaved,
         source: r.source,
         examplesUsed: r.examplesUsed,
       };

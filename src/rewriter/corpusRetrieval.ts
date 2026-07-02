@@ -31,14 +31,15 @@ export function buildRewriteMessages(
   portfolio?: string,
 ): { system: string; user: string } {
   const base =
-    "You rewrite a developer's prompt into a SHORTER, self-contained prompt they can paste " +
-    'directly into Copilot to get the SAME result.\n' +
-    '- KEEP every concrete detail the user gave: file/function/component names, requirements, ' +
-    'constraints, and the key facts from any context they pasted.\n' +
-    '- CUT filler, politeness, hedging, and repetition. Use the FEWEST tokens that still works.\n' +
-    '- Only ADD a missing specific if the prompt is otherwise unactionable, and keep it minimal.\n' +
-    '- Do NOT give advice, options, notes, or explanations. Output ONLY the rewritten prompt text ' +
-    'the user can paste \u2014 no preamble, quotes, or code fences.';
+    "You COMPRESS a developer's prompt so it uses FEWER tokens while producing the SAME " +
+    'result. This is a rewrite they will paste directly into Copilot.\n' +
+    '- KEEP every concrete detail they gave: file/function/component names, requirements, ' +
+    'constraints, and any facts they pasted. Never drop information.\n' +
+    '- CUT filler, politeness, hedging, and repetition. Use the fewest words that still work.\n' +
+    "- NEVER invent details they didn't give — no made-up file names, APIs, or requirements.\n" +
+    '- If the prompt is already tight and cannot be shortened without losing meaning, return it ' +
+    'UNCHANGED.\n' +
+    '- Output ONLY the rewritten prompt text \u2014 no preamble, quotes, code fences, advice, or notes.';
   // The compact profile replaces stuffing many examples — cheaper and personalized.
   const system = portfolio ? `${base}\n\n${portfolio}` : base;
   const shots = examples

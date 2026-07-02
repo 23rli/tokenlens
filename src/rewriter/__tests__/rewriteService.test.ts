@@ -55,27 +55,29 @@ describe('RewriteService (offline)', () => {
 });
 
 describe('RewriteService (auto / LM)', () => {
-  it('always surfaces an explicitly-produced LM rewrite, even when longer (clarified)', async () => {
+  it('never surfaces a rewrite that is longer than the original', async () => {
     const longer =
       'Refactor validateEmail in src/utils.ts to use one regex and return a typed Result; add a test for empty and malformed input.';
-    const r = await serviceWithLlm('auto', async () => longer).rewrite({ promptText: 'fix the email thing' });
-    expect(r.source).toBe('llm');
-    expect(r.rewrittenPrompt).toBe(longer);
-    expect(r.clarified).toBe(true);
+    const r = await serviceWithLlm('llm', async () => longer).rewrite({ promptText: 'fix the email thing' });
+    expect(r.rewrittenPrompt).toBeUndefined();
+    expect(r.source).toBe('none');
   });
 
-  it('reports % saved when the LM rewrite is shorter', async () => {
+  it('reports tokens saved when the LM rewrite is shorter', async () => {
     const r = await serviceWithLlm('auto', async () => 'Fix login.').rewrite({
-      promptText: 'Please could you kindly help me fix the login flow, thank you so much.',
+      promptText: 'Please could you kindly help me fix the login flow in the app, thank you so very much.',
     });
     expect(r.source).toBe('llm');
     expect(r.estimatedTokenReductionPct).toBeGreaterThan(0);
+    expect(r.estimatedTokensSaved).toBeGreaterThan(0);
   });
 
   it('falls back to the offline cleanup when the LM fails', async () => {
     const r = await serviceWithLlm('auto', async () => {
       throw new Error('no access');
-    }).rewrite({ promptText: 'Please kindly fix the bug, thanks!' });
+    }).rewrite({
+      promptText: 'Please kindly fix the login bug in the checkout page, it is broken somehow, thanks a lot!',
+    });
     expect(r.source).toBe('offline');
     expect(r.rewrittenPrompt).toBeTruthy();
   });
@@ -93,20 +95,20 @@ describe('RewriteService (cost-aware auto gating)', () => {
     expect(r.source).not.toBe('llm');
   });
 
-  it('DOES use the LLM for a vague prompt with no named target', async () => {
+  it('does NOT spend an LLM call (or invent detail) for a short vague prompt', async () => {
     let called = false;
     const svc = serviceWithLlm('auto', async () => {
       called = true;
       return 'Fix the login flow in src/auth/login.ts and add a test.';
     });
     const r = await svc.rewrite({ promptText: 'fix the login' });
-    expect(called).toBe(true);
-    expect(r.source).toBe('llm');
+    expect(called).toBe(false); // short + vague: nothing to compress, and we never invent
+    expect(r.source).toBe('none');
   });
 
   it('reports the tokens the LLM rewrite call itself spent (for net accounting)', async () => {
     const r = await serviceWithLlm('auto', async () => 'Fix login in src/auth/login.ts.').rewrite({
-      promptText: 'please help me fix the login flow, it is broken somehow, thanks',
+      promptText: 'please help me fix the login flow in the checkout page, it is broken somehow, thanks a lot',
     });
     expect(r.source).toBe('llm');
     expect(r.llmTokensSpent).toBeGreaterThan(0);

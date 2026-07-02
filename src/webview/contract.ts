@@ -58,6 +58,8 @@ export interface ComposeResult {
   tip?: string;
   rewrittenPrompt?: string;
   estimatedTokenReductionPct?: number;
+  /** Estimated number of tokens the leaner rewrite saves. */
+  estimatedTokensSaved?: number;
   inputTokens: number;
   /** Predicted likelihood this prompt needs a retry (the costliest miss). */
   retryRisk?: 'low' | 'medium' | 'high';
@@ -71,8 +73,8 @@ export interface AutoRewriteView {
   text: string;
   rewrittenPrompt?: string;
   estimatedTokenReductionPct?: number;
-  /** True when the rewrite adds context to reduce vagueness (avoids retries). */
-  clarified?: boolean;
+  /** Estimated number of tokens the rewrite saves vs. the original. */
+  estimatedTokensSaved?: number;
   source: 'offline' | 'llm' | 'none';
   examplesUsed: number;
 }

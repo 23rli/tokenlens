@@ -235,6 +235,7 @@ export class ScoreService {
     let tip: string | undefined;
     let rewrittenPrompt: string | undefined;
     let estimatedTokenReductionPct: number | undefined;
+    let estimatedTokensSaved: number | undefined;
     if (text.trim() && !(resp.overallScore >= 85 && categories.length === 0)) {
       const t = heuristicGenerateTip({
         promptText: text,
@@ -251,6 +252,7 @@ export class ScoreService {
       if (lean !== trimmed && lean.length < trimmed.length) {
         rewrittenPrompt = lean;
         estimatedTokenReductionPct = Math.round((1 - lean.length / trimmed.length) * 100);
+        estimatedTokensSaved = Math.max(1, Math.round(tokens.inputTokens * (1 - lean.length / trimmed.length)));
       }
     }
 
@@ -280,6 +282,7 @@ export class ScoreService {
       tip,
       rewrittenPrompt,
       estimatedTokenReductionPct,
+      estimatedTokensSaved,
       inputTokens: tokens.inputTokens,
       retryRisk: retry.level,
       retryReasons: retry.reasons,

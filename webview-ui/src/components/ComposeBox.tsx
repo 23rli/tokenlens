@@ -44,6 +44,27 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
     : matches
       ? result!.estimatedTokenReductionPct
       : undefined;
+  const savedTokens = rewriteFromAuto
+    ? auto!.estimatedTokensSaved
+    : matches
+      ? result!.estimatedTokensSaved
+      : undefined;
+
+  // One nudge at most, only when there's no concrete leaner rewrite to offer —
+  // so the panel stays calm and the next action is always obvious.
+  const nudge = rewrite
+    ? undefined
+    : contextGap
+      ? `🧩 ${contextGap}`
+      : retryRisk === 'high' || retryRisk === 'medium'
+        ? `⚠️ ${retryRisk === 'high' ? 'High' : 'Some'} retry risk${
+            retryReason ? ` — ${retryReason}` : ''
+          }. Name the exact file or function you mean.`
+        : autoMatches && auto!.source === 'none'
+          ? '✓ Already lean — nothing to trim.'
+          : matches && result!.tip
+            ? `💡 ${result!.tip}`
+            : undefined;
 
   const requestRewrite = (): void => {
     if (!text.trim()) return;
@@ -61,59 +82,47 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
       <textarea
         class="compose-input"
         rows={3}
-        placeholder="Draft a prompt here — Tokentama scores it live and can rewrite it leaner before you send it to Copilot."
+        placeholder="Draft a prompt here — Tokentama rewrites it leaner before you send it to Copilot, so you spend fewer tokens."
         value={text}
         onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
       />
 
-      {matches && result!.tip && <p class="compose-tip">💡 {result!.tip}</p>}
-
-      {(retryRisk === 'high' || retryRisk === 'medium') && (
-        <p class={`retry-risk retry-${retryRisk}`}>
-          ⚠️ {retryRisk === 'high' ? 'High' : 'Some'} retry risk{retryReason ? ` — ${retryReason}` : ''}.
-          Add specifics or use “Rewrite in my style” to land on the first try.
-        </p>
-      )}
-
-      {contextGap && <p class="compose-tip">🧩 {contextGap}</p>}
-
-      {autoMatches && auto!.source === 'none' && !rewrite && (
-        <p class="compose-tip">✓ Already efficient — no leaner rewrite needed.</p>
-      )}
-
-      {rewrite && (
+      {rewrite ? (
         <div class="compose-rewrite">
           <div class="rewrite-head">
-            {rewriteFromAuto ? 'Rewrite in your style' : 'Suggested rewrite'}
+            {rewriteFromAuto ? 'Leaner rewrite · your style' : 'Leaner rewrite'}
             {rewriteFromAuto && auto!.source === 'llm' && auto!.examplesUsed > 0 && (
               <span class="rewrite-badge"> · {auto!.examplesUsed} examples</span>
             )}
           </div>
           <pre class="rewrite-body">{rewrite}</pre>
-          {savingsPct != null && (
-            <p class="rewrite-savings">Saves ~{Math.round(savingsPct)}% tokens</p>
-          )}
-          {savingsPct == null && rewriteFromAuto && auto!.clarified && (
-            <p class="rewrite-savings">+ context to land on the first try — avoids a retry</p>
-          )}
+          <p class="rewrite-savings">
+            {savedTokens != null && savedTokens > 0
+              ? `Saves ~${savedTokens} tokens${savingsPct != null ? ` (${Math.round(savingsPct)}%)` : ''}`
+              : savingsPct != null
+                ? `Saves ~${Math.round(savingsPct)}% of tokens`
+                : 'Leaner — same result'}
+          </p>
         </div>
+      ) : (
+        nudge && <p class="compose-tip">{nudge}</p>
       )}
 
       {text.trim() && (
         <div class="compose-actions">
-          <button class="primary" onClick={requestRewrite} disabled={pending}>
-            {pending ? '✨ Rewriting…' : '✨ Rewrite in my style'}
-          </button>
           {rewrite && (
             <button
-              class="ghost"
+              class="primary"
               onClick={() => post({ type: 'copyToCopilot', text: rewrite, adopted: true })}
             >
-              Copy rewrite
+              Use rewrite
             </button>
           )}
+          <button class={rewrite ? 'ghost' : 'primary'} onClick={requestRewrite} disabled={pending}>
+            {pending ? '✨ Rewriting…' : rewrite ? '↻ Regenerate' : '✨ Rewrite in my style'}
+          </button>
           <button class="ghost" onClick={() => post({ type: 'copyToCopilot', text, adopted: false })}>
-            Copy my prompt
+            Copy as-is
           </button>
         </div>
       )}
