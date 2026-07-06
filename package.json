@@ -2,7 +2,7 @@
   "name": "tokentama",
   "displayName": "Tokentama",
   "description": "An AI-efficiency companion that scores prompt waste, coaches better prompts, and grows a tamagotchi ecosystem that thrives when you prompt efficiently.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "tokentama",
   "license": "MIT",
   "repository": {
@@ -139,9 +139,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "tokentama.resetEcosystem",
+          "command": "tokentama.compactSession",
           "when": "view == tokentama.dashboard",
           "group": "navigation@2"
+        },
+        {
+          "command": "tokentama.resetEcosystem",
+          "when": "view == tokentama.dashboard",
+          "group": "navigation@3"
         }
       ]
     },
