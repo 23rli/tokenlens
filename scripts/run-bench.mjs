@@ -1,11 +1,14 @@
-// Repeatable runner for the token-savings benchmark. Bundles scripts/bench.ts with
-// the same @tokentama/* aliases esbuild uses, then executes it. Run: `npm run bench`.
+// Repeatable runner for the token-savings benchmarks. Bundles a scripts/*.ts entry
+// with the same @tokentama/* aliases esbuild uses, then executes it.
+//   npm run bench            -> synthetic conversations
+//   npm run bench:history    -> your real Copilot history
 import esbuild from 'esbuild';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
+const entry = process.argv[2] ?? 'bench.ts';
 
 const alias = {
   '@tokentama/shared-types': path.join(root, 'src/types/index.ts'),
@@ -14,9 +17,9 @@ const alias = {
   '@tokentama/ingestion': path.join(root, 'src/capture/parsers/index.ts'),
 };
 
-const outfile = path.join(here, '.bench.cjs');
+const outfile = path.join(here, `.${entry.replace(/\.ts$/, '')}.cjs`);
 await esbuild.build({
-  entryPoints: [path.join(here, 'bench.ts')],
+  entryPoints: [path.join(here, entry)],
   bundle: true,
   platform: 'node',
   format: 'cjs',

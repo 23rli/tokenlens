@@ -17,6 +17,7 @@ import { summarizeContext, historyAdvisory } from './analysis/contextBreakdown';
 import { buildSessionSummary } from './analysis/sessionSummary';
 import { computeOutcomes } from './analysis/outcomes';
 import { buildPortfolio, renderPortfolio } from './analysis/userPortfolio';
+import { extractTargets, deriveInsights } from './analysis/corpusInsights';
 
 const SECRET_KEY = 'tokentama.llmApiKey';
 
@@ -203,8 +204,10 @@ export function activate(context: vscode.ExtensionContext): void {
     toggleCapture,
     scoreDraft: (text) => scoreService.scoreDraft(text),
     autoRewrite: async (text) => {
-      const model = store.getState().model?.family;
-      const r = await rewriteService.rewrite({ promptText: text, model, explicit: true });
+      const state = store.getState();
+      const model = state.model?.family;
+      const recentContext = buildRecentContext(state.recentEvents, corpus.all(), text);
+      const r = await rewriteService.rewrite({ promptText: text, model, recentContext });
       if (r.llmTokensSpent) store.addToolSpend(r.llmTokensSpent);
       log(
         `Rewrite requested — source: ${r.source}${
@@ -276,6 +279,38 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   /* disposables are cleaned up via context.subscriptions */
+}
+
+/**
+ * Build a compact "session context" string for the rewriter from recent scored
+ * prompts and the user's frequent corpus targets, so it can resolve vague
+ * references ("the component") to files already discussed — without inventing.
+ */
+function buildRecentContext(
+  recentEvents: { promptPreview: string }[] | undefined,
+  records: { promptText?: string }[],
+  currentText: string,
+): string | undefined {
+  const already = new Set(extractTargets(currentText));
+  const files: string[] = [];
+  const addFiles = (text: string): void => {
+    for (const t of extractTargets(text)) {
+      if (!already.has(t) && !files.includes(t)) files.push(t);
+    }
+  };
+  for (const e of recentEvents ?? []) addFiles(e.promptPreview);
+  for (const t of deriveInsights(records as never).topTargets) {
+    if (!already.has(t) && !files.includes(t)) files.push(t);
+  }
+  const recentAsks = (recentEvents ?? [])
+    .slice(0, 2)
+    .map((e) => e.promptPreview?.trim())
+    .filter((p): p is string => !!p);
+
+  const parts: string[] = [];
+  if (files.length) parts.push(`Files/targets recently worked on: ${files.slice(0, 5).join(', ')}`);
+  if (recentAsks.length) parts.push(`Recent asks: ${recentAsks.map((a) => `“${a}”`).join(' | ')}`);
+  return parts.length ? parts.join('\n') : undefined;
 }
 
 /**

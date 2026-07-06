@@ -9,6 +9,7 @@ release/
 *.tsbuildinfo
 *.vsix
 scripts/.bench.cjs
+scripts/.bench-history.cjs
 .vite/
 
 # Test / coverage

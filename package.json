@@ -318,7 +318,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "node scripts/run-bench.mjs"
+    "bench": "node scripts/run-bench.mjs",
+    "bench:history": "node scripts/run-bench.mjs bench-history.ts"
   },
   "dependencies": {
     "preact": "^10.25.4"

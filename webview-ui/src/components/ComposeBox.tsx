@@ -3,26 +3,45 @@ import type { AutoRewriteView, ComposeResult } from '../../../src/webview/contra
 import { post } from '../vscodeApi';
 
 /**
- * In-the-moment coaching surface we fully own: as the user drafts a prompt here,
- * we debounce-score it with the offline engine (no network, no state change) and
- * offer a leaner rewrite before it ever reaches Copilot. An on-demand "rewrite in
- * my style" action produces a corpus-informed rewrite (offline, or a cheap model).
+ * In-the-moment coaching surface we fully own: as the user drafts a prompt here we
+ * (1) score it live with the offline engine and (2) AUTOMATICALLY produce a leaner,
+ * more precise rewrite — the system decides whether that needs the model or a free
+ * offline cleanup, so the user never has to. "Copy to Copilot" sends the best
+ * version and clears the box; "Clear" resets it.
  */
 export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: AutoRewriteView }) {
   const [text, setText] = useState('');
   const [pending, setPending] = useState(false);
-  const timer = useRef<number | undefined>(undefined);
+  const scoreTimer = useRef<number | undefined>(undefined);
+  const rewriteTimer = useRef<number | undefined>(undefined);
+  const lastRewriteReq = useRef<string>('');
 
+  // Fast live score (offline, no tokens) as the user types.
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
+    if (scoreTimer.current) clearTimeout(scoreTimer.current);
     const draft = text;
-    timer.current = window.setTimeout(() => post({ type: 'composeInput', text: draft }), 300);
+    scoreTimer.current = window.setTimeout(() => post({ type: 'composeInput', text: draft }), 300);
     return () => {
-      if (timer.current) clearTimeout(timer.current);
+      if (scoreTimer.current) clearTimeout(scoreTimer.current);
     };
   }, [text]);
 
-  // An arriving auto-rewrite for the current draft clears the pending state.
+  // Automatic rewrite once the draft settles — the host decides offline vs. model.
+  useEffect(() => {
+    if (rewriteTimer.current) clearTimeout(rewriteTimer.current);
+    const draft = text.trim();
+    if (draft.length < 20 || draft === lastRewriteReq.current) return;
+    rewriteTimer.current = window.setTimeout(() => {
+      lastRewriteReq.current = draft;
+      setPending(true);
+      post({ type: 'autoRewrite', text });
+    }, 1100);
+    return () => {
+      if (rewriteTimer.current) clearTimeout(rewriteTimer.current);
+    };
+  }, [text]);
+
+  // An arriving rewrite for the current draft clears the pending state.
   useEffect(() => {
     if (auto && auto.text === text) setPending(false);
   }, [auto, text]);
@@ -36,7 +55,7 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
 
   const autoMatches = auto != null && auto.text === text;
   const autoRewrite = autoMatches ? auto!.rewrittenPrompt : undefined;
-  // Prefer the corpus-informed auto rewrite; fall back to the live heuristic one.
+  // Prefer the host rewrite; fall back to the live offline suggestion while it loads.
   const rewrite = autoRewrite ?? (matches ? result!.rewrittenPrompt : undefined);
   const rewriteFromAuto = autoRewrite != null;
   const savingsPct = rewriteFromAuto
@@ -50,26 +69,34 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
       ? result!.estimatedTokensSaved
       : undefined;
 
-  // One nudge at most, only when there's no concrete leaner rewrite to offer —
-  // so the panel stays calm and the next action is always obvious.
+  // One nudge at most, only when there's no concrete rewrite to offer.
   const nudge = rewrite
     ? undefined
-    : contextGap
-      ? `🧩 ${contextGap}`
-      : retryRisk === 'high' || retryRisk === 'medium'
-        ? `⚠️ ${retryRisk === 'high' ? 'High' : 'Some'} retry risk${
-            retryReason ? ` — ${retryReason}` : ''
-          }. Name the exact file or function you mean.`
-        : autoMatches && auto!.source === 'none'
-          ? '✓ Already lean — nothing to trim.'
-          : matches && result!.tip
-            ? `💡 ${result!.tip}`
-            : undefined;
+    : pending
+      ? undefined
+      : contextGap
+        ? `🧩 ${contextGap}`
+        : retryRisk === 'high' || retryRisk === 'medium'
+          ? `⚠️ ${retryRisk === 'high' ? 'High' : 'Some'} retry risk${
+              retryReason ? ` — ${retryReason}` : ''
+            }. Name the exact file or function you mean.`
+          : autoMatches && auto!.source === 'none'
+            ? '✓ Already clear — no changes needed.'
+            : matches && result!.tip
+              ? `💡 ${result!.tip}`
+              : undefined;
 
-  const requestRewrite = (): void => {
-    if (!text.trim()) return;
-    setPending(true);
-    post({ type: 'autoRewrite', text });
+  const clear = (): void => {
+    setText('');
+    lastRewriteReq.current = '';
+    setPending(false);
+  };
+
+  const send = (): void => {
+    const out = rewrite ?? text;
+    if (!out.trim()) return;
+    post({ type: 'copyToCopilot', text: out, adopted: rewrite != null });
+    clear();
   };
 
   return (
@@ -82,7 +109,7 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
       <textarea
         class="compose-input"
         rows={3}
-        placeholder="Draft a prompt here — Tokentama rewrites it leaner before you send it to Copilot, so you spend fewer tokens."
+        placeholder="Draft a prompt here — Tokentama scores it live and automatically rewrites it leaner. Copy to Copilot when ready."
         value={text}
         onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
       />
@@ -90,11 +117,7 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
       {rewrite ? (
         <div class="compose-rewrite">
           <div class="rewrite-head">
-            {rewriteFromAuto
-              ? auto!.source === 'llm'
-                ? 'Rewrite · your Copilot model'
-                : 'Rewrite · offline'
-              : 'Suggested rewrite'}
+            {rewriteFromAuto && auto!.source === 'llm' ? 'Rewrite · your Copilot model' : 'Rewrite'}
             {rewriteFromAuto && auto!.source === 'llm' && auto!.examplesUsed > 0 && (
               <span class="rewrite-badge"> · {auto!.examplesUsed} of your examples</span>
             )}
@@ -106,25 +129,19 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
               : 'Sharper prompt — aims to land the right result on the first try'}
           </p>
         </div>
+      ) : pending ? (
+        <p class="compose-tip">✨ Improving your prompt…</p>
       ) : (
         nudge && <p class="compose-tip">{nudge}</p>
       )}
 
       {text.trim() && (
         <div class="compose-actions">
-          {rewrite && (
-            <button
-              class="primary"
-              onClick={() => post({ type: 'copyToCopilot', text: rewrite, adopted: true })}
-            >
-              Use rewrite
-            </button>
-          )}
-          <button class={rewrite ? 'ghost' : 'primary'} onClick={requestRewrite} disabled={pending}>
-            {pending ? '✨ Rewriting…' : rewrite ? '↻ Regenerate' : '✨ Rewrite in my style'}
+          <button class="primary" onClick={send}>
+            {rewrite ? 'Copy rewrite to Copilot' : 'Copy to Copilot'}
           </button>
-          <button class="ghost" onClick={() => post({ type: 'copyToCopilot', text, adopted: false })}>
-            Copy as-is
+          <button class="ghost" onClick={clear}>
+            Clear
           </button>
         </div>
       )}

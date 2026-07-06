@@ -71,6 +71,8 @@ export class RewriteService {
     model?: string;
     /** User clicked “Rewrite in my style” — always use the model, skip the cost gate. */
     explicit?: boolean;
+    /** Recent session context (files/targets and last asks) to resolve references. */
+    recentContext?: string;
   }): Promise<RewriteResult> {
     const prompt = input.promptText;
     if (!prompt.trim()) return { source: 'none', examplesUsed: 0 };
@@ -85,7 +87,7 @@ export class RewriteService {
 
     const useLlm = cfg.mode === 'llm' || (cfg.mode === 'auto' && (input.explicit || this.worthLlm(prompt)));
     if (useLlm) {
-      const llm = await this.tryLlm(prompt, examples, cfg);
+      const llm = await this.tryLlm(prompt, examples, cfg, input.recentContext);
       if (llm) {
         // Surface the model's improved prompt as-is — it fixes the ask, whether or
         // not that makes it shorter. (We report token savings only when it is.)
@@ -119,8 +121,9 @@ export class RewriteService {
     prompt: string,
     examples: TrainingPair[],
     cfg: RewriteConfig,
+    recentContext?: string,
   ): Promise<{ raw: string; tokensSpent: number } | undefined> {
-    const { system, user } = buildRewriteMessages(prompt, examples, this.getPortfolio?.());
+    const { system, user } = buildRewriteMessages(prompt, examples, this.getPortfolio?.(), recentContext);
     const spend = (out: string): number =>
       estimateTokens(system) + estimateTokens(user) + estimateTokens(out);
     // Prefer the user's own Copilot models via the injected LM (no key required).

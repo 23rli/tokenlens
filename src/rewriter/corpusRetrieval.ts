@@ -29,6 +29,7 @@ export function buildRewriteMessages(
   prompt: string,
   examples: TrainingPair[],
   portfolio?: string,
+  recentContext?: string,
 ): { system: string; user: string } {
   const base =
     "You rewrite a developer's rough prompt into a clear, specific, self-contained prompt " +
@@ -38,8 +39,10 @@ export function buildRewriteMessages(
     '- Make it unambiguous and actionable: state the goal, the target, and the expected output ' +
     'plainly. Fixing the ask matters more than making it short.\n' +
     '- Cut filler, politeness, and repetition, but never at the cost of clarity.\n' +
-    "- NEVER invent specifics they didn't give (no made-up file names, APIs, or requirements). " +
-    'If a detail is genuinely missing, phrase the prompt so the model asks for or handles it.\n' +
+    '- Use the SESSION CONTEXT only to resolve vague references (e.g. turn "the component" into ' +
+    'the exact file already discussed). NEVER invent specifics not in the prompt or that context ' +
+    '(no made-up file names, APIs, or requirements). If a detail is genuinely missing, phrase the ' +
+    'prompt so the model asks for or handles it.\n' +
     '- Output ONLY the rewritten prompt \u2014 no advice, options, notes, preamble, quotes, or code fences.';
   // The compact profile replaces stuffing many examples — cheaper and personalized.
   const system = portfolio ? `${base}\n\n${portfolio}` : base;
@@ -47,8 +50,12 @@ export function buildRewriteMessages(
     .slice(0, 2)
     .map((e) => `Original:\n${e.input}\nLeaner rewrite:\n${e.output}`)
     .join('\n\n');
+  const contextBlock = recentContext?.trim()
+    ? `Session context (recent files/targets and asks — use only to resolve references):\n${recentContext.trim()}\n\n`
+    : '';
   const user =
     (shots ? `Examples of how I like my prompts rewritten:\n\n${shots}\n\n` : '') +
+    contextBlock +
     `Rewrite this prompt in the same style:\n\nOriginal:\n${prompt}\nLeaner rewrite:`;
   return { system, user };
 }
