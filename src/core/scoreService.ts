@@ -227,6 +227,10 @@ export class ScoreService {
       sessionId: 'compose',
       userId: 'local',
       promptText: text,
+      // Recent finalized prompts let the redundancy detector catch cross-turn re-pastes.
+      recentPrompts: (this.store.getState().recentEvents ?? [])
+        .map((e) => e.promptPreview)
+        .filter((p): p is string => !!p),
       metadata: { promptLengthChars: text.length },
     };
     const resp = scorePrompt(req);

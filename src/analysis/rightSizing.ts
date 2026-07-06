@@ -9,6 +9,16 @@ import type { Difficulty } from './taskDifficulty';
 export interface RightSizeRec {
   recommend: boolean;
   message: string;
+  /** Estimated Copilot credits (AICs) saved per turn by taking the lighter option. */
+  estCreditsSaved?: number;
+}
+
+/** A lighter model typically costs ~40% less per turn; a lower effort ~30% less. */
+export const MODEL_DOWNGRADE_SAVING = 0.4;
+export const EFFORT_DOWNGRADE_SAVING = 0.3;
+
+function creditsSaved(turnCredits: number | undefined, ratio: number): number | undefined {
+  return turnCredits && turnCredits > 0 ? Math.round(turnCredits * ratio * 10) / 10 : undefined;
 }
 
 const PREMIUM = new Set(['powerful', 'premium', 'high']);
@@ -20,13 +30,18 @@ function isPremiumModel(model: ModelInfo): boolean {
 }
 
 /** Suggest a lighter model for trivial/moderate tasks currently on a premium model. */
-export function modelRightSizing(difficulty: Difficulty, model: ModelInfo): RightSizeRec {
+export function modelRightSizing(
+  difficulty: Difficulty,
+  model: ModelInfo,
+  turnCredits?: number,
+): RightSizeRec {
   if (difficulty === 'complex' || !isPremiumModel(model)) {
     return { recommend: false, message: '' };
   }
   const name = model.name ?? model.family;
   return {
     recommend: true,
+    estCreditsSaved: creditsSaved(turnCredits, MODEL_DOWNGRADE_SAVING),
     message: `This looks like a ${difficulty} task on ${name} (a premium model). A lighter model would likely handle it for less — switch down and escalate only if the result falls short.`,
   };
 }
@@ -46,7 +61,11 @@ function pickLowerEffort(supported: string[] | undefined, current: string): stri
 }
 
 /** Suggest a lower reasoning effort for a trivial task currently at high effort. */
-export function effortRightSizing(difficulty: Difficulty, model: ModelInfo): RightSizeRec {
+export function effortRightSizing(
+  difficulty: Difficulty,
+  model: ModelInfo,
+  turnCredits?: number,
+): RightSizeRec {
   const effort = (model.reasoningEffort ?? '').toLowerCase();
   if (difficulty !== 'trivial' || !HIGH_EFFORTS.has(effort)) {
     return { recommend: false, message: '' };
@@ -55,6 +74,7 @@ export function effortRightSizing(difficulty: Difficulty, model: ModelInfo): Rig
   const suggestion = lower ? `'${lower}'` : 'a lower';
   return {
     recommend: true,
+    estCreditsSaved: creditsSaved(turnCredits, EFFORT_DOWNGRADE_SAVING),
     message: `Trivial task at '${effort}' thinking effort — ${suggestion} effort would spend far fewer reasoning tokens for the same result.`,
   };
 }

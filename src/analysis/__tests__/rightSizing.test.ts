@@ -47,6 +47,13 @@ describe('modelRightSizing', () => {
   it('does not recommend when already on a cheaper model', () => {
     expect(modelRightSizing('trivial', cheap).recommend).toBe(false);
   });
+  it('quantifies credits saved from the turn cost (~40% of a premium turn)', () => {
+    const r = modelRightSizing('moderate', premiumHigh, 100);
+    expect(r.estCreditsSaved).toBeCloseTo(40, 1);
+  });
+  it('omits a savings figure when no turn cost is known', () => {
+    expect(modelRightSizing('trivial', premiumHigh).estCreditsSaved).toBeUndefined();
+  });
 });
 
 describe('effortRightSizing', () => {
@@ -62,5 +69,8 @@ describe('effortRightSizing', () => {
     expect(
       effortRightSizing('trivial', { ...premiumHigh, reasoningEffort: 'low' }).recommend,
     ).toBe(false);
+  });
+  it('quantifies effort credits saved (~30% of the turn cost)', () => {
+    expect(effortRightSizing('trivial', premiumHigh, 100).estCreditsSaved).toBeCloseTo(30, 1);
   });
 });

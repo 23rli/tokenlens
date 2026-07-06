@@ -64,7 +64,7 @@ export const verbosityMismatchDetector: Detector = {
 
     // 1) Padding / politeness filler (deterministic, prompt-only).
     const fillerHits = FILLER_PHRASES.filter((p) => lower.includes(p));
-    const fillerPenalty = clamp01(fillerHits.length / 4) * 0.5;
+    const fillerPenalty = clamp01(fillerHits.length / 3) * 0.6;
     if (fillerHits.length) triggers.push(`padding ("${fillerHits.slice(0, 2).join('", "')}")`);
 
     // 2) Explicit "give me everything" cues.

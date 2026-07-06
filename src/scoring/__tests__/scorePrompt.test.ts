@@ -111,3 +111,39 @@ describe('scorePrompt — deltas and learning adoption', () => {
     ).toBeGreaterThan(0);
   });
 });
+
+describe('scorePrompt — redundancy recalibration', () => {
+  const sev = (r: ReturnType<typeof scorePrompt>): number =>
+    r.wasteBreakdown.find((c) => c.category === 'redundantContext')?.severity ?? 0;
+
+  it('flags an explicit restatement ("Again, the ...") as redundant', () => {
+    const r = scorePrompt({
+      ...base,
+      promptText:
+        'I have a component UserCard in src/components/UserCard.tsx. It renders a name and an avatar. ' +
+        'Again, the component is UserCard and it renders a name and an avatar; add a loading skeleton.',
+    });
+    expect(sev(r)).toBeGreaterThan(0.4);
+    expect(r.overallScore).toBeLessThan(90);
+  });
+
+  it('flags re-pasted context from a recent prompt (cross-turn)', () => {
+    const earlier =
+      'Refactor the UserService in src/services/UserService.ts to split responsibilities into two classes.';
+    const r = scorePrompt({
+      ...base,
+      promptText: `${earlier} Please do this now.`,
+      recentPrompts: [earlier],
+    });
+    expect(sev(r)).toBeGreaterThan(0.4);
+  });
+
+  it('does not flag a normal follow-up that shares only a file name', () => {
+    const r = scorePrompt({
+      ...base,
+      promptText: 'Add error handling to LoginForm.tsx.',
+      recentPrompts: ['Add a loading spinner to LoginForm.tsx.'],
+    });
+    expect(sev(r)).toBeLessThan(0.3);
+  });
+});

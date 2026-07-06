@@ -14,15 +14,28 @@ export function RightSizePanel({
   model?: ModelInfo;
 }) {
   if (!lastEvent?.difficulty || !model) return null;
-  const modelRec = modelRightSizing(lastEvent.difficulty, model);
-  const effortRec = effortRightSizing(lastEvent.difficulty, model);
+  const turnCredits = lastEvent.copilotCredits ?? lastEvent.estimatedCredits;
+  const modelRec = modelRightSizing(lastEvent.difficulty, model, turnCredits);
+  const effortRec = effortRightSizing(lastEvent.difficulty, model, turnCredits);
   if (!modelRec.recommend && !effortRec.recommend) return null;
+
+  const saved = (c?: number): string => (c && c > 0 ? ` (~${c} AICs/turn)` : '');
 
   return (
     <section class="rightsize">
       <span class="section-title">Right-size this task</span>
-      {modelRec.recommend && <p class="rightsize-rec">🪶 {modelRec.message}</p>}
-      {effortRec.recommend && <p class="rightsize-rec">🧠 {effortRec.message}</p>}
+      {modelRec.recommend && (
+        <p class="rightsize-rec">
+          🪶 {modelRec.message}
+          {saved(modelRec.estCreditsSaved)}
+        </p>
+      )}
+      {effortRec.recommend && (
+        <p class="rightsize-rec">
+          🧠 {effortRec.message}
+          {saved(effortRec.estCreditsSaved)}
+        </p>
+      )}
     </section>
   );
 }
