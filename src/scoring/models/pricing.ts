@@ -45,6 +45,9 @@ export const DEFAULT_PRICING: ModelPricing = {
   cachedUsdPerMillion: 0.05,
 };
 
+/** Cache reads (re-sent context) are billed at ~10% of the fresh input rate. */
+export const CACHE_READ_RATIO = 0.1;
+
 export function resolvePricing(modelFamily?: string): ModelPricing {
   if (!modelFamily) return DEFAULT_PRICING;
   const key = modelFamily.toLowerCase();
@@ -70,16 +73,24 @@ export function estimateCostUsd(
  * Estimated Copilot CREDITS (AICs) for a turn — the objective cost unit. Uses the
  * model's REAL per-1M rates from models.json when available, falling back to the
  * built-in table (whose values ≈ credits/1000, so ×1000 recovers the credit rate).
+ *
+ * `cachedInputTokens` are re-sent context served from the prompt cache; they are
+ * billed at a fraction of the fresh input rate (see CACHE_READ_RATIO). In agent
+ * mode most of a turn's input is cached, so ignoring this massively overstates cost.
  */
 export function estimateCredits(
   inputTokens: number,
   outputTokens: number,
   model?: ModelInfo,
+  cachedInputTokens = 0,
 ): number {
   const p = resolvePricing(model?.family);
   const inputPerM = model?.inputPer1M ?? p.inputUsdPerMillion * 1000;
   const outputPerM = model?.outputPer1M ?? p.outputUsdPerMillion * 1000;
-  const credits = (inputTokens * inputPerM + outputTokens * outputPerM) / 1_000_000;
+  const cachedPerM = inputPerM * CACHE_READ_RATIO;
+  const cached = Math.max(0, Math.min(cachedInputTokens, inputTokens));
+  const fresh = inputTokens - cached;
+  const credits = (fresh * inputPerM + cached * cachedPerM + outputTokens * outputPerM) / 1_000_000;
   return Math.round(credits * 1000) / 1000;
 }
 

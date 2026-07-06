@@ -30,6 +30,19 @@ export interface BuildPromptEventInput {
   contextBreakdown?: ContextSlice[];
 }
 
+/**
+ * Conservative estimate of a turn's CACHED input: the system instructions + tool
+ * definitions are byte-identical every turn, so from turn 2 on they're served from
+ * the prompt cache (~10% of the fresh rate). We count only this stable prefix (not
+ * prior messages, which are also cached) to avoid over-crediting the cache.
+ */
+function cachedInputEstimate(turnIndex: number, breakdown?: ContextSlice[]): number {
+  if (turnIndex <= 0 || !breakdown) return 0;
+  return breakdown
+    .filter((s) => /system|tool/i.test(s.category) || /system|tool/i.test(s.label))
+    .reduce((sum, s) => sum + (s.tokens ?? 0), 0);
+}
+
 /** Build a normalized, self-contained PromptEvent with token + cost estimates. */
 export function buildPromptEvent(input: BuildPromptEventInput): PromptEvent {
   const inputTokens = input.inputTokensOverride ?? estimateTokens(input.promptText);
@@ -38,6 +51,7 @@ export function buildPromptEvent(input: BuildPromptEventInput): PromptEvent {
   const estimatedCostUsd = estimateCostUsd(inputTokens, outputTokens, family);
 
   const model: ModelInfo | undefined = input.model ?? (family ? { id: family, family } : undefined);
+  const cachedInput = cachedInputEstimate(input.turnIndex, input.contextBreakdown);
 
   return {
     eventId: randomUUID(),
@@ -54,7 +68,7 @@ export function buildPromptEvent(input: BuildPromptEventInput): PromptEvent {
       inputTokens,
       outputTokens,
       estimatedCostUsd,
-      estimatedCredits: estimateCredits(inputTokens, outputTokens, model),
+      estimatedCredits: estimateCredits(inputTokens, outputTokens, model, cachedInput),
       copilotCredits: input.copilotCredits,
       estimated: input.inputTokensOverride == null,
       contextBreakdown: input.contextBreakdown,

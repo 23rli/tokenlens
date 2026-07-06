@@ -16,12 +16,11 @@ import {
   type TurnTokens,
 } from '@tokentama/ingestion';
 import { leanRewrite } from '@tokentama/llm-adapters';
-import { estimateTokens, similarity } from '@tokentama/scoring-engine';
+import { estimateTokens } from '@tokentama/scoring-engine';
+import { isReask } from '../src/analysis/retryDetect';
 
 const N_SESSIONS = 5;
 const MIN_TURNS = 8; // a "conversation" worth measuring
-const RETRY_RE =
-  /^(?:it'?s |it |that |this |still|nope|no[,.\s]|hmm|wait|actually|that (?:didn'?t|did not)|(?:doesn'?t|does not) work|not working|broken|same (?:as|error|issue)|try again|again[,.\s]|error|failed|fix it|didn'?t work)/i;
 
 function readText(path: string): string {
   try {
@@ -64,12 +63,6 @@ function loadSession(s: ReturnType<typeof listCopilotSessions>[number]): Session
     hasReal: realArr.length > 0,
     model,
   };
-}
-
-function isRetry(cur: string, prev: string | undefined): boolean {
-  if (!prev) return false;
-  if (similarity(cur, prev) >= 0.45) return true;
-  return cur.length < 90 && RETRY_RE.test(cur.trim());
 }
 
 function pct(before: number, after: number): number {
@@ -122,7 +115,7 @@ if (loaded.length === 0) {
       if (realCredit > 0) realCreditTurns += 1;
       realCredits += realCredit;
 
-      const retry = isRetry(p, s.prompts[i - 1]);
+      const retry = isReask(p, s.prompts[i - 1]);
       if (retry) {
         retries += 1;
         retryTokens += turnTotal;

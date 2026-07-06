@@ -59,8 +59,11 @@ export function computeOutcomes(
     );
     const avoidedRate = Math.max(0, retryRateNotAdopted! - retryRateAdopted!);
     estRetriesAvoided = Math.round(avoidedRate * adopted.length);
-    // Each avoided retry saves roughly one full turn's worth of input tokens.
-    estTokensSaved = Math.round(estRetriesAvoided * avg(adopted.map((r) => r.inputTokens)));
+    // Each avoided retry saves roughly one full turn (input + output) — a re-ask
+    // re-sends the whole turn, so valuing it at input alone understates the win.
+    estTokensSaved = Math.round(
+      estRetriesAvoided * avg(adopted.map((r) => r.inputTokens + r.outputTokens)),
+    );
   }
 
   return {

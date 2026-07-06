@@ -51,6 +51,21 @@ describe('estimateCredits', () => {
     // claude-opus table input 0.5 → 500 AICs/1M
     expect(estimateCredits(1_000_000, 0, { id: 'x', family: 'claude-opus' })).toBeCloseTo(500, 3);
   });
+
+  it('prices cached (re-sent) input at ~10% of the fresh input rate', () => {
+    const opus: ModelInfo = {
+      id: 'o',
+      family: 'claude-opus',
+      inputPer1M: 500,
+      outputPer1M: 2500,
+    };
+    // 1M input, ALL cached → 10% of 500 = 50 AICs (vs 500 fully fresh)
+    expect(estimateCredits(1_000_000, 0, opus, 1_000_000)).toBeCloseTo(50, 3);
+    // half cached → 0.5M*500/1M + 0.5M*50/1M = 250 + 25 = 275 AICs
+    expect(estimateCredits(1_000_000, 0, opus, 500_000)).toBeCloseTo(275, 3);
+    // cached count is clamped to input; extra output still billed at full rate
+    expect(estimateCredits(1_000_000, 1_000_000, opus, 2_000_000)).toBeCloseTo(50 + 2500, 3);
+  });
 });
 
 describe('creditsToUsd', () => {
