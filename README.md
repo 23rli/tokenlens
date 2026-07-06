@@ -87,7 +87,7 @@ Design choices that make the score **stable and trustworthy**:
 Five internal sub-dimensions (`promptQuality`, `contextEfficiency`, `toolEfficiency`, `outputEfficiency`, `learningAdoption`) are still computed and available in the data model for deeper analysis.
 </details>
 
-### � Real impact — tokens, credits, and (optionally) dollars
+### 💰 Real impact — tokens, credits, and (optionally) dollars
 
 Three tiles show what your session actually spent: **tokens**, **Copilot AI credits (AICs)** — the unit Copilot really meters — and, if you opt in, an estimated **dollar** cost. Beneath each, the share that was **wasted** (caused by inefficiency) is called out, tied directly to your TokenScore. Environmental impact (CO₂ / water) remains available for the sustainability-minded.
 
@@ -98,6 +98,25 @@ Three tiles show what your session actually spent: **tokens**, **Copilot AI cred
 - **Dollars are optional and never guessed.** A `$` figure only appears if you set `tokentama.impact.usdPerCredit` to your org's internal $/AIC rate; otherwise Tokentama shows tokens + AICs and hides `$`, keeping the headline honest.
 - **Wasted portion:** `Σ (tokens × wasteScore%)` per prompt → so the "wasted" figure is tied directly to your score.
 - **Environmental estimates** (CO₂ `0.11 g` and water `2 mL` per 1,000 tokens) are configurable under `tokentama.impact.*` / `tokentama.sustainability.*`, following published per-token estimates (UC Riverside · Lawrence Berkeley National Lab · *"How Hungry is AI?"*, arXiv 2025).
+</details>
+
+### 🎯 How it saves tokens — without making Copilot worse
+
+The guiding rule: **never sacrifice coding capability for tokens.** A tool that makes Copilot noticeably worse won't get used — and a lossy shortcut backfires, because a wrong answer just makes you re-ask (which re-sends everything again). So Tokentama sorts its savings levers by **capability risk** and leads with the ones that cost you nothing:
+
+| Lever | Capability risk | What it does |
+| --- | --- | --- |
+| **Retry-avoidance** | none (helps) | Clearer prompts land the right answer first try — fewer wrong answers, not more. |
+| **Tool-trim** | none | Flags *unused* tool definitions/MCP servers to disable — they're re-sent every turn. |
+| **Right-sizing** | low, reversible | Suggests a lighter model/effort for trivial/moderate tasks — "escalate if it falls short." Drops **no** context. |
+| **Compaction** | higher (opt-in) | Reclaims re-sent history — the biggest raw lever, but the risky one. Only offered with a working-set recap (files by reference), a preview, and a retry-rate guardrail. |
+
+Measured on real Copilot sessions (see `npm run bench:history`), the **capability-safe levers alone recover ~30–40% of billed AICs with no context dropped**, while complex turns keep the full model and context untouched. Compaction is a larger raw lever but is deliberately opt-in and guarded so it can never quietly degrade your results. Prompt-text *compression* turns out to be a rounding error on real sessions — the tokens are in the re-sent context and the model choice, not your wording.
+
+<details>
+<summary><b>Under the hood — how we know</b></summary>
+
+`scripts/bench-history.ts` reads your actual Copilot sessions from disk and computes an **opportunity stack in real billed AICs**: retry-avoidance, right-sizing (only trivial/moderate turns, counted by a difficulty classifier), tool-trim (from `promptTokenDetails`), and compaction (an upper bound). It splits each turn's billed credit into output (not cached) vs input (mostly a cached prefix) so the numbers reflect real billing, and it reports the **task mix** so you can see exactly how many turns are left fully untouched. Everything stays local.
 </details>
 
 ### 📊 Live Copilot data

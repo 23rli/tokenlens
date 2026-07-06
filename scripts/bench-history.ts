@@ -99,6 +99,11 @@ if (loaded.length === 0) {
   let gRightSizeAic = 0;
   let gCompactionAic = 0;
   let gToolAic = 0;
+  // Capability-safe subtotal (retry + right-size + tool-trim, de-duped) and difficulty mix.
+  let gSafe = 0;
+  let gTrivial = 0;
+  let gModerate = 0;
+  let gComplex = 0;
 
   for (const s of loaded) {
     let processed = 0; // sum of per-turn full model input+output (re-sent context included)
@@ -113,6 +118,10 @@ if (loaded.length === 0) {
     let rightSizeAic = 0;
     let compactionAic = 0;
     let toolAic = 0;
+    let safeCombined = 0; // capability-safe recoverable, de-duped
+    let trivial = 0;
+    let moderate = 0;
+    let complex = 0;
     const family = s.model?.family;
     const outRate = s.model?.outputPer1M ?? resolvePricing(family).outputUsdPerMillion * 1000;
 
@@ -146,22 +155,34 @@ if (loaded.length === 0) {
       // Split billed credit into output (not cached, ~5x input rate) vs input
       // (mostly a cached prefix). Levers that cut OUTPUT (retry, right-size) save
       // real money; levers that cut cached INPUT (compaction, tools) save less.
+      const level = classifyDifficulty(p).level;
+      if (level === 'trivial') trivial += 1;
+      else if (level === 'moderate') moderate += 1;
+      else complex += 1;
+
       if (realCredit > 0) {
         const estOut = Math.min(realCredit, (outTok * outRate) / 1_000_000);
         const estIn = Math.max(0, realCredit - estOut);
-        if (retry) retryAic += realCredit; // avoiding the re-ask saves the whole turn
-        if (classifyDifficulty(p).level !== 'complex') rightSizeAic += realCredit * RIGHTSIZE_FRAC;
-        const history = Math.max(0, inTok - promptTok); // prior context re-sent this turn
-        if (history > COMPACT_THRESHOLD && inTok > 0) {
-          compactionAic += estIn * (Math.max(0, history - RECAP_TOKENS) / inTok);
-        }
+        let toolTrimTurn = 0;
         const details = real?.promptTokenDetails;
         if (details && inTok > 0) {
           const toolTok = details
             .filter((d) => /tool/i.test(d.label) || /tool/i.test(d.category))
             .reduce((sum, d) => sum + (inTok * d.percentageOfPrompt) / 100, 0);
-          toolAic += estIn * (toolTok / inTok) * TOOL_TRIM_FRAC;
+          toolTrimTurn = estIn * (toolTok / inTok) * TOOL_TRIM_FRAC;
+          toolAic += toolTrimTurn;
         }
+        if (retry) retryAic += realCredit; // avoiding the re-ask saves the whole turn
+        if (level !== 'complex') rightSizeAic += realCredit * RIGHTSIZE_FRAC;
+        const history = Math.max(0, inTok - promptTok); // prior context re-sent this turn
+        if (history > COMPACT_THRESHOLD && inTok > 0) {
+          compactionAic += estIn * (Math.max(0, history - RECAP_TOKENS) / inTok);
+        }
+        // Capability-SAFE combined (no context dropped, de-duped): a re-ask avoids the
+        // whole turn; otherwise a non-complex turn can down-route; tool-trim is additive.
+        // COMPLEX turns are left fully untouched — full model + context preserved.
+        const base = retry ? realCredit : level !== 'complex' ? realCredit * RIGHTSIZE_FRAC : 0;
+        safeCombined += base + (retry ? 0 : toolTrimTurn);
       }
     }
 
@@ -177,6 +198,10 @@ if (loaded.length === 0) {
     gRightSizeAic += rightSizeAic;
     gCompactionAic += compactionAic;
     gToolAic += toolAic;
+    gSafe += safeCombined;
+    gTrivial += trivial;
+    gModerate += moderate;
+    gComplex += complex;
 
     console.log(`• session ${s.id}…  (${s.prompts.length} turns, tokens ${s.hasReal ? 'REAL' : 'estimated'})`);
     console.log(`  input+output processed across turns: ${processed.toLocaleString()} (~${avgCtx.toLocaleString()}/turn — context is re-sent each turn)`);
@@ -190,9 +215,16 @@ if (loaded.length === 0) {
       console.log(`  real billed credits: ${realCredits.toFixed(2)} -> ${realCreditsAfter.toFixed(2)} AIC`);
       const sp = (a: number): number => Math.round((a / realCredits) * 100);
       console.log(
-        `  opportunity stack (share of ${realCredits.toFixed(0)} billed AIC; NOT additive): ` +
-          `retry ${retryAic.toFixed(0)} (${sp(retryAic)}%) · right-size ${rightSizeAic.toFixed(0)} (${sp(rightSizeAic)}%) · ` +
-          `compaction ${compactionAic.toFixed(0)} (${sp(compactionAic)}%) · tool-trim ${toolAic.toFixed(0)} (${sp(toolAic)}%)`,
+        `  task mix: ${trivial} trivial · ${moderate} moderate · ${complex} complex ` +
+          `(complex left untouched — full model + context)`,
+      );
+      console.log(
+        `  CAPABILITY-SAFE recoverable (no context dropped): ${safeCombined.toFixed(0)} AIC (${sp(safeCombined)}%)`,
+      );
+      console.log(
+        `  full opportunity stack (NOT additive): retry ${retryAic.toFixed(0)} (${sp(retryAic)}%) · ` +
+          `right-size ${rightSizeAic.toFixed(0)} (${sp(rightSizeAic)}%) · tool-trim ${toolAic.toFixed(0)} (${sp(toolAic)}%) · ` +
+          `compaction ${compactionAic.toFixed(0)} (${sp(compactionAic)}%, higher-risk)`,
       );
     }
     console.log('');
@@ -209,20 +241,28 @@ if (loaded.length === 0) {
         `${gRealCreditsAfter.toFixed(2)} AIC   saved ${(gRealCredits - gRealCreditsAfter).toFixed(2)} AIC`,
     );
     const sp = (a: number): number => (gRealCredits > 0 ? Math.round((a / gRealCredits) * 100) : 0);
-    console.log('\n--- Opportunity stack across all sessions (share of billed AIC; NOT additive) ---');
-    console.log(`  retry-avoidance:  ${gRetryAic.toFixed(0)} AIC (${sp(gRetryAic)}%)   [cuts whole re-ask turns incl. output]`);
-    console.log(`  right-sizing:     ${gRightSizeAic.toFixed(0)} AIC (${sp(gRightSizeAic)}%)   [down-route trivial/moderate turns]`);
-    console.log(`  compaction:       ${gCompactionAic.toFixed(0)} AIC (${sp(gCompactionAic)}%)   [re-sent history is cached → small billed win]`);
-    console.log(`  tool-trim:        ${gToolAic.toFixed(0)} AIC (${sp(gToolAic)}%)   [disable unused tool defs]`);
+    const totalTurns = gTrivial + gModerate + gComplex;
+    const complexPct = totalTurns > 0 ? Math.round((gComplex / totalTurns) * 100) : 0;
+    console.log('\n--- CAPABILITY-SAFE savings (no context dropped) ---');
+    console.log(`  recoverable: ${gSafe.toFixed(0)} AIC (${sp(gSafe)}% of billed) without dropping any context`);
+    console.log(
+      `  task mix: ${gTrivial} trivial · ${gModerate} moderate · ${gComplex} complex ` +
+        `— the ${complexPct}% complex turns keep full model + context, untouched`,
+    );
+    console.log('    = retry-avoidance (clearer prompts, fewer wrong answers) + right-sizing (down-route');
+    console.log('      trivial/moderate turns, REVERSIBLE — escalate if a lighter model falls short)');
+    console.log('      + tool-trim (disable UNUSED tool defs). None of these remove context you need.');
+    console.log('\n--- Higher-risk lever (opt-in, guarded) ---');
+    console.log(`  compaction:  up to ${gCompactionAic.toFixed(0)} AIC (${sp(gCompactionAic)}%) — UPPER BOUND (lossless).`);
+    console.log('    Only safe with a working-set recap (files by reference) + preview + retry-rate guardrail.');
   } else {
     console.log('real billed credits: not metered in these agent sessions (rely on the % above).');
   }
   console.log(
-    '\nHow to read this: the opportunity stack is in REAL billed AIC. The big levers are the\n' +
-      'ones that cut OUTPUT tokens (retry-avoidance, right-sizing) — output is billed ~5x input\n' +
-      'and is NOT cached. Compaction and tool-trim cut re-sent INPUT, which is mostly a cache\n' +
-      'hit (~10% rate), so their billed win is smaller than the raw token counts suggest — they\n' +
-      'matter most on cold caches or context that overflows the cache window. Levers are not\n' +
-      'additive (a re-ask is also right-sizable). Compression stays a rounding error.\n',
+    '\nHow to read this: the CAPABILITY-SAFE number is the honest headline — it drops NO context.\n' +
+      'Right-sizing only down-routes trivial/moderate turns (escalate if short); tool-trim removes\n' +
+      'UNUSED tool defs; retry-avoidance makes prompts clearer (fewer wrong answers). Complex turns\n' +
+      'are never touched. Compaction is the big raw lever but risks capability, so it is opt-in with\n' +
+      'a preview + a retry-rate guardrail. Levers are not additive. Compression is a rounding error.\n',
   );
 }

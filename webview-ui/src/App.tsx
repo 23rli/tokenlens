@@ -45,13 +45,13 @@ export function App() {
         <ComposeBox result={compose} auto={auto} />
         <ImpactTrio metrics={state.metrics} />
         <ContextPanel lastEvent={state.lastEvent} model={state.model} />
+        <RightSizePanel lastEvent={state.lastEvent} model={state.model} />
         <OutcomesPanel outcomes={state.outcomes} />
         <CoachingPanel tip={state.tip} lastEvent={state.lastEvent} />
         <details class="insights">
           <summary>More insights</summary>
           <div class="insights-body">
             <LiveData state={state} />
-            <RightSizePanel lastEvent={state.lastEvent} model={state.model} />
             <QualityBars lastEvent={state.lastEvent} />
           </div>
         </details>
