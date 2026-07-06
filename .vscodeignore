@@ -19,9 +19,9 @@ eslint.config.mjs
 .npmrc
 .env.example
 *.vsix
-!dist/**
+!dist/**/*.js
+!dist/**/*.css
 !media/**
 !README.md
 !CHANGELOG.md
 !LICENSE
-dist/**/*.map
