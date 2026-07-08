@@ -75,7 +75,7 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
       {series.length > 1 && (
         <div class="gauge-graphwrap">
           <span class="gauge-graphtitle">
-            Tokens carried per turn{sampled ? ` · ${series.length} turns, sampled` : ' · hover for prompt'}
+            Tokens carried per turn{sampled ? ` · ${series.length} turns` : ''}
           </span>
           <div class="gauge-graph">
             <div class="gauge-yaxis">

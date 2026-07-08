@@ -282,7 +282,6 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   let watcher: CopilotWatcher | undefined;
-  let announcedCapture = false;
   const startWatcher = (): void => {
     if (watcher) return;
     const captureCfg = vscode.workspace.getConfiguration('tokentama.capture');
@@ -311,12 +310,6 @@ export function activate(context: vscode.ExtensionContext): void {
             .slice(0, 60)
             .replace(/\s+/g, ' ')}…"`,
         );
-        if (!announcedCapture) {
-          announcedCapture = true;
-          void vscode.window.showInformationMessage(
-            'Tokentama is now auto-grading your Copilot prompts.',
-          );
-        }
         // Precognition: rebuild the next-turn forecast from the active session's
         // real metered tokens and refresh the panel (skeletons fill in).
         refreshForecast();
@@ -342,9 +335,7 @@ export function activate(context: vscode.ExtensionContext): void {
     void store.setCaptureEnabled(next);
     if (next) startWatcher();
     else stopWatcher();
-    void vscode.window.showInformationMessage(
-      `Tokentama passive capture ${next ? 'enabled' : 'disabled'}.`,
-    );
+    log(`passive capture ${next ? 'enabled' : 'disabled'}.`);
   };
 
   const copyToCopilot = ({ text, adopted }: { text: string; adopted: boolean }): void => {
@@ -357,11 +348,6 @@ export function activate(context: vscode.ExtensionContext): void {
       promptText: text,
       adopted,
     });
-    void vscode.window.showInformationMessage(
-      adopted
-        ? 'Leaner rewrite copied — paste it into Copilot Chat.'
-        : 'Prompt copied to clipboard.',
-    );
   };
 
   const provider = new DashboardViewProvider(context.extensionUri, store, {

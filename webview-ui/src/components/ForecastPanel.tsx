@@ -2,9 +2,9 @@ import type { ForecastView } from '../../../src/webview/contract';
 import { fmtNum } from '../format';
 
 /**
- * A small session header + the two headline numbers side by side: LAST USED (the
- * real tokens the previous turn cost) vs PREDICTED NEXT, with a one-line forecast
- * accuracy (percentage first). Always renders (skeleton before data).
+ * The chat header + the two headline numbers side by side: LAST TURN (the real
+ * input tokens the previous turn cost) vs NEXT TURN (est.), plus a one-line
+ * range and forecast accuracy. Always renders (skeleton before data).
  */
 export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
   const f = forecast;
@@ -21,16 +21,17 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
       </section>
 
       <section class="card next">
+        <p class="card-scope">What your next prompt will cost, predicted from recent turns.</p>
         <div class="next-cols">
           <div class="next-col">
-            <span class="next-kicker">Last used</span>
+            <span class="next-kicker">Last turn</span>
             <span class={`next-number${f?.realLastInputTokens != null ? '' : ' muted'}`}>
               {f?.realLastInputTokens != null ? fmtNum(f.realLastInputTokens) : '—'}
             </span>
           </div>
           <div class="next-arrow">→</div>
           <div class="next-col">
-            <span class="next-kicker">Predicted next</span>
+            <span class="next-kicker">Next turn (est.)</span>
             <span class={`next-number next-pred${f ? '' : ' muted'}`}>
               {f ? fmtNum(f.predictedInputTokens) : '—'}
             </span>
@@ -41,11 +42,11 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
           {f ? (
             <>
               {f.predictedCredits != null && <>≈ {Math.round(f.predictedCredits).toLocaleString()} credits · </>}
-              likely {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)}
+              range {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)} tokens
               {f.confidence < 0.4 && <span class="next-hedge"> · low conf.</span>}
             </>
           ) : (
-            'likely —'
+            'range —'
           )}
         </div>
 
