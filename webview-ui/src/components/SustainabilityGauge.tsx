@@ -26,9 +26,22 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
   const fill = !f ? 0 : f.loadFraction != null ? Math.min(1, f.loadFraction) : Math.min(1, f.contextTokens / 400_000);
   const blown = f?.sustainability === 'overloaded';
   const series = f?.contextSeries ?? [];
+  const prompts = f?.turnPrompts ?? [];
   const peak = series.length ? Math.max(...series) : 1;
   const resets = series.reduce((n, v, i) => (i > 0 && v < series[i - 1] * 0.6 ? n + 1 : n), 0);
   const pct = f?.loadFraction != null ? Math.round(f.loadFraction * 100) : undefined;
+
+  // Downsample the BARS so a long chat doesn't turn into unreadable slivers; the
+  // trend line still uses the full series, so the true shape is preserved.
+  const MAX_BARS = 44;
+  const bars: { v: number; turn: number; prompt?: string }[] =
+    series.length <= MAX_BARS
+      ? series.map((v, i) => ({ v, turn: i + 1, prompt: prompts[i] }))
+      : Array.from({ length: MAX_BARS }, (_, b) => {
+          const idx = Math.min(series.length - 1, Math.floor(((b + 1) * series.length) / MAX_BARS) - 1);
+          return { v: series[idx], turn: idx + 1, prompt: prompts[idx] };
+        });
+  const sampled = series.length > MAX_BARS;
 
   return (
     <section class={`card gauge${blown ? ' gauge-blown' : ''}`}>
@@ -60,7 +73,9 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
 
       {series.length > 1 && (
         <div class="gauge-graphwrap">
-          <span class="gauge-graphtitle">Tokens carried each turn · hover a bar for its prompt</span>
+          <span class="gauge-graphtitle">
+            Tokens carried per turn{sampled ? ` · ${series.length} turns, sampled` : ' · hover for prompt'}
+          </span>
           <div class="gauge-graph">
             <div class="gauge-yaxis">
               <span>{fmtNum(peak)}</span>
@@ -68,15 +83,15 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
             </div>
             <div class="gauge-plot">
               <div class="gauge-spark">
-                {series.map((v, i) => (
+                {bars.map((d, i) => (
                   <span
                     key={i}
                     class="gauge-bar"
-                    title={`Turn ${i + 1}: ${fmtNum(v)} tokens${f?.turnPrompts?.[i] ? ` — "${f.turnPrompts[i]}"` : ''}`}
+                    title={`Turn ${d.turn}: ${fmtNum(d.v)} tokens${d.prompt ? ` — "${d.prompt}"` : ''}`}
                     style={{
-                      height: `${Math.max(2, Math.round((v / peak) * 100))}%`,
-                      background: i === series.length - 1 ? band.color : 'var(--vscode-descriptionForeground, #8b949e)',
-                      opacity: i === series.length - 1 ? 1 : 0.4,
+                      height: `${Math.max(2, Math.round((d.v / peak) * 100))}%`,
+                      background: i === bars.length - 1 ? band.color : 'var(--vscode-descriptionForeground, #8b949e)',
+                      opacity: i === bars.length - 1 ? 1 : 0.4,
                     }}
                   />
                 ))}

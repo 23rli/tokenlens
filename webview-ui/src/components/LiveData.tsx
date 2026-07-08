@@ -8,12 +8,10 @@ import { fmtNum } from '../format';
  */
 export function LiveData({ state }: { state: TamaState }) {
   const m = state.model;
-  const efforts = m?.reasoningEfforts ?? [];
-  // Prefer the effort the session ACTUALLY selected; fall back to the model's
-  // supported range only when the concrete choice isn't recorded.
-  const reasoning =
-    m?.reasoningEffort ??
-    (efforts.length > 1 ? `${efforts[0]}\u2013${efforts[efforts.length - 1]}` : efforts[0]);
+  // Only show the reasoning effort when the session ACTUALLY recorded which one
+  // was selected. Never show the supported range (e.g. "low–max") — that reads
+  // like the model is using a range, which is wrong and confusing.
+  const reasoning = m?.reasoningEffort;
 
   const agent = m ? [m.name ?? m.id, m.category].filter(Boolean).join(' · ') : undefined;
   const reasoningLine = m
