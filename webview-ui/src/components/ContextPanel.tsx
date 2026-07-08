@@ -1,4 +1,4 @@
-import type { ModelInfo, ScoredEventView } from '../../../src/webview/contract';
+import type { ModelInfo, ContextSlice } from '../../../src/webview/contract';
 import { summarizeContext, toolAdvisory, historyAdvisory } from '../../../src/analysis/contextBreakdown';
 import { post } from '../vscodeApi';
 import { fmtNum } from '../format';
@@ -6,31 +6,33 @@ import { fmtNum } from '../format';
 /**
  * "Where your tokens go" — the real cost driver. Most of a turn's INPUT tokens are
  * fixed overhead (system instructions + tool definitions) plus history/context sent
- * every turn; the user's message is usually a sliver. That overhead is a stable,
- * cacheable prefix — the biggest lever for real savings.
+ * every turn; the user's message is usually a sliver. The breakdown comes straight
+ * from Copilot's on-disk `promptTokenDetails` for the last real turn.
  */
 export function ContextPanel({
-  lastEvent,
+  breakdown,
+  inputTokens,
   model,
 }: {
-  lastEvent?: ScoredEventView;
+  breakdown?: ContextSlice[];
+  inputTokens?: number;
   model?: ModelInfo;
 }) {
-  const slices = lastEvent?.contextBreakdown;
-  const totalIn = lastEvent?.inputTokens ?? 0;
+  const slices = breakdown;
+  const totalIn = inputTokens ?? 0;
   const summary = summarizeContext(slices, totalIn);
   if (!summary) {
     // Always render — a skeleton keeps the dashboard layout fixed before data.
     return (
-      <section class="context">
+      <section class="card context">
         <div class="context-head">
           <span class="section-title">Where your tokens go</span>
-          <span class="context-total context-muted">— in</span>
+          <span class="context-total muted">— in</span>
         </div>
         <div class="context-bar context-bar-empty" />
-        <p class="context-note context-muted">
-          Waiting for a Copilot turn with token details… the system / tools / history / message
-          split will appear here.
+        <p class="context-note muted">
+          Reading Copilot's token breakdown from disk… the system / tools / history / message split
+          appears once the current turn is metered.
         </p>
       </section>
     );
@@ -42,7 +44,7 @@ export function ContextPanel({
   const palette = ['#539bf5', '#d29922', '#3fb950', '#a371f7', '#f85149', '#8b949e'];
 
   return (
-    <section class="context">
+    <section class="card context">
       <div class="context-head">
         <span class="section-title">Where your tokens go</span>
         <span class="context-total">{fmtNum(summary.totalTokens)} in</span>

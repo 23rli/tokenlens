@@ -2,10 +2,10 @@ import type { ForecastView } from '../../../src/webview/contract';
 import { fmtNum } from '../format';
 
 /**
- * The hero card. Answers three questions at a glance, flat/business style:
- *   WHERE ARE WE  — which session + turn, and the last captured prompt.
- *   WHAT'S NEXT   — the PREDICTED next-turn cost (the big number) + range.
- *   VS REALITY    — the REAL last-turn cost + the system's live accuracy.
+ * The hero card. Flat, VS Code-native, and unambiguous:
+ *   WHERE ARE WE  — which session + turn (header), and the CURRENT prompt (labelled).
+ *   WHAT'S NEXT   — the PREDICTED next-turn cost in a boxed hero (the one big number).
+ *   VS REALITY    — the REAL last-turn cost + the live accuracy.
  * Always renders (skeleton before data) so the layout never shifts.
  */
 export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
@@ -17,29 +17,29 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
       <header class="fc-top">
         <span class="fc-track">TRACKING</span>
         <span class="fc-sid">
-          {f?.sessionShortId ? `session ${f.sessionShortId}` : 'no active session'}
-          {f && f.turnCount > 0 ? ` · turn ${f.turnCount}` : ''}
+          {f?.sessionShortId ? `${f.sessionShortId} · turn ${f.turnCount || 1}` : 'no active session'}
         </span>
-        <span class="fc-acc" title="Live self-measured accuracy on your real turns">
-          acc {acc}
-        </span>
+        <span class="fc-acc" title="Live self-measured accuracy on your real turns">acc {acc}</span>
       </header>
 
-      <p class={`fc-prompt${f?.lastPromptPreview ? '' : ' muted'}`}>
-        {f?.lastPromptPreview ? `“${f.lastPromptPreview}”` : 'Waiting for your first Copilot turn…'}
-      </p>
+      <div class="fc-current">
+        <span class="fc-label">Current prompt</span>
+        <p class={`fc-prompt${f?.lastPromptPreview ? '' : ' muted'}`}>
+          {f?.lastPromptPreview ?? 'Waiting for your first Copilot turn…'}
+        </p>
+      </div>
 
-      <div class="fc-hero">
-        <span class="fc-kicker">PREDICTED NEXT TURN</span>
+      <div class="fc-herobox">
+        <span class="fc-kicker">Predicted next turn</span>
         <div class="fc-num-row">
           <span class={`fc-number${f ? '' : ' muted'}`}>{f ? fmtNum(f.predictedInputTokens) : '—'}</span>
-          <span class="fc-unit">tokens in</span>
+          <span class="fc-unit">tokens</span>
+          {f?.predictedCredits != null && <span class="fc-credits">≈ {Math.round(f.predictedCredits).toLocaleString()} AIC</span>}
         </div>
         <div class="fc-range">
           {f ? (
             <>
               range {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)}
-              {f.predictedCredits != null && <> · ~{Math.round(f.predictedCredits).toLocaleString()} AIC</>}
               {f.confidence < 0.4 && <span class="fc-hedge"> · low confidence</span>}
             </>
           ) : (
@@ -49,7 +49,7 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
       </div>
 
       <div class="fc-real">
-        <span class="fc-real-k">REAL last turn</span>
+        <span class="fc-real-k">Real last turn</span>
         <span class="fc-real-v">
           {f?.realLastInputTokens != null ? `${fmtNum(f.realLastInputTokens)} tokens` : '—'}
         </span>

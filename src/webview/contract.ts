@@ -178,6 +178,10 @@ export interface ForecastView {
   turnCount: number;
   /** Real input tokens per turn, oldest→newest, for the context-growth bar graph. */
   contextSeries: number[];
+  /** Where the last real turn's input tokens went (system/tools/history/message). */
+  contextBreakdown?: ContextSlice[];
+  /** Total input tokens of the last real turn (denominator for the breakdown). */
+  contextInputTokens?: number;
 }
 
 /** Full snapshot of pet state pushed to the webview. */

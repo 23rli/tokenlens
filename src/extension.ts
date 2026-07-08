@@ -21,7 +21,7 @@ import { extractTargets, deriveInsights } from './analysis/corpusInsights';
 import { ForecastService, type ForecastAccuracy } from './analysis/forecastService';
 import type { Forecast } from './analysis/forecast';
 import type { ForecastView } from './webview/contract';
-import type { PromptEvent } from '@tokentama/shared-types';
+import type { PromptEvent, ContextSlice } from '@tokentama/shared-types';
 import { estimateCredits } from '@tokentama/scoring-engine';
 
 const SECRET_KEY = 'tokentama.llmApiKey';
@@ -95,10 +95,18 @@ export function activate(context: vscode.ExtensionContext): void {
         ? findActiveSession(undefined, workspaceHash) ?? undefined
         : findActiveSession();
       if (!session) return;
-      const real = readSessionEvents(session).filter(
+      const events = readSessionEvents(session);
+      if (events.length === 0) return;
+      // Metered turns drive the forecast HISTORY; the newest turn overall is the
+      // CURRENT prompt the user just wrote — it may not be metered yet (chatSessions
+      // lags the transcript), but we still show it and predict from it so the panel
+      // tracks what's actually happening instead of the last fully-billed turn.
+      const real = events.filter(
         (e) => e.tokens && e.tokens.estimated === false && (e.tokens.inputTokens ?? 0) > 0,
       );
-      if (real.length === 0) return;
+      const current = events[events.length - 1];
+      const lastReal = real.length ? real[real.length - 1] : undefined;
+
       const fs = new ForecastService();
       for (const e of real) {
         fs.recordTurn(
@@ -111,13 +119,19 @@ export function activate(context: vscode.ExtensionContext): void {
           { maxInputTokens: e.model?.maxInputTokens, contextMaxTokens: e.model?.contextMaxTokens },
         );
       }
-      const last = real[real.length - 1];
+      // Predict the CURRENT turn, conditioned on the prompt actually written.
+      const forecast = fs.forecastNext(current.promptText);
+      const modelEvent = lastReal ?? current;
       store.setForecast(
-        buildForecastView(fs.forecastNext(), fs.accuracy(), last, {
+        buildForecastView(forecast, fs.accuracy(), modelEvent, {
           sessionShortId: session.sessionId.slice(0, 8),
-          lastPromptPreview: last.promptText.replace(/\s+/g, ' ').trim().slice(0, 100),
+          lastPromptPreview: current.promptText.replace(/\s+/g, ' ').trim().slice(0, 140),
           turnCount: real.length,
           contextSeries: real.map((e) => e.tokens!.inputTokens),
+          realLastInputTokens: lastReal?.tokens?.inputTokens,
+          realLastCredits: lastReal?.tokens?.copilotCredits ?? lastReal?.tokens?.estimatedCredits,
+          contextBreakdown: lastReal?.tokens?.contextBreakdown,
+          contextInputTokens: lastReal?.tokens?.inputTokens,
         }),
       );
     } catch {
@@ -399,11 +413,14 @@ function buildForecastView(f: Forecast, acc: ForecastAccuracy, event: PromptEven
   lastPromptPreview?: string;
   turnCount: number;
   contextSeries: number[];
+  realLastInputTokens?: number;
+  realLastCredits?: number;
+  contextBreakdown?: ContextSlice[];
+  contextInputTokens?: number;
 }): ForecastView {
   const contextTokens = f.breakdown.carriedContext;
   const limit = event.model?.maxInputTokens ?? event.model?.contextMaxTokens;
   const loadFraction = limit && limit > 0 ? contextTokens / limit : undefined;
-  const freshTokens = Math.max(0, f.predictedInputTokens - contextTokens);
   const expectedOutput = event.tokens?.outputTokens ?? 0;
   const predictedCredits = event.model
     ? estimateCredits(f.predictedInputTokens, expectedOutput, event.model, contextTokens)
@@ -428,8 +445,8 @@ function buildForecastView(f: Forecast, acc: ForecastAccuracy, event: PromptEven
     confidence: f.confidence,
     resetRisk: f.resetRisk,
     hungriest: f.hungriest,
-    realLastInputTokens: event.tokens?.inputTokens,
-    realLastCredits: event.tokens?.copilotCredits ?? event.tokens?.estimatedCredits,
+    realLastInputTokens: extras.realLastInputTokens,
+    realLastCredits: extras.realLastCredits,
     accuracyScore: acc.score,
     accuracySamples: acc.samples,
     intervalCoverage: acc.intervalCoverage,
@@ -441,6 +458,8 @@ function buildForecastView(f: Forecast, acc: ForecastAccuracy, event: PromptEven
     lastPromptPreview: extras.lastPromptPreview,
     turnCount: extras.turnCount,
     contextSeries: extras.contextSeries,
+    contextBreakdown: extras.contextBreakdown,
+    contextInputTokens: extras.contextInputTokens,
   };
 }
 

@@ -43,8 +43,12 @@ export function App() {
         {/* 2 — Context weight: how heavy the session is + per-turn growth graph. */}
         <SustainabilityGauge forecast={state.forecast} />
 
-        {/* 3 — Where the tokens go — always visible (the real cost driver). */}
-        <ContextPanel lastEvent={state.lastEvent} model={state.model} />
+        {/* 3 — Where the tokens go — pulled from disk (last real turn's breakdown). */}
+        <ContextPanel
+          breakdown={state.forecast?.contextBreakdown ?? state.lastEvent?.contextBreakdown}
+          inputTokens={state.forecast?.contextInputTokens ?? state.lastEvent?.inputTokens}
+          model={state.model}
+        />
 
         {/* 4 — Live cost this session (tokens / credits / $). */}
         <ImpactTrio metrics={state.metrics} />

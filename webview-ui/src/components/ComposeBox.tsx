@@ -109,7 +109,7 @@ export function ComposeBox({ result, auto }: { result?: ComposeResult; auto?: Au
       <textarea
         class="compose-input"
         rows={3}
-        placeholder="Draft a prompt here — Tokentama scores it live and automatically rewrites it leaner. Copy to Copilot when ready."
+        placeholder="Draft a prompt to estimate what it will cost before you send it."
         value={text}
         onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
       />
