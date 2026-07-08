@@ -8,12 +8,12 @@ import { fmtNum } from '../format';
  */
 export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
   const f = forecast;
-  const name = f?.sessionTitle || (f?.sessionShortId ? `Session ${f.sessionShortId}` : 'No active session');
+  const name = f?.sessionTitle || (f?.sessionShortId ? `Chat ${f.sessionShortId}` : 'No active chat');
 
   return (
     <>
       <section class="card now">
-        <span class="now-label">Session</span>
+        <span class="now-label">Chat</span>
         <div class="now-row">
           <span class="now-name">{name}</span>
           {f && f.turnCount > 0 && <span class="now-turn">turn {f.turnCount}</span>}

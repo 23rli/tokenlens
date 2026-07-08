@@ -2,7 +2,7 @@ import type { SuccessMetrics, ForecastView } from '../../../src/webview/contract
 import { fmtNum, fmtUsd } from '../format';
 
 /**
- * Session cost, anchored on MEASURED units: tokens and Copilot credits (AICs) are
+ * Total cost, anchored on MEASURED units: tokens and Copilot credits (AICs) are
  * what Copilot meters; dollars are a derived estimate. Under each figure we show
  * the LAST TURN'S delta — how much the most recent turn added — so movement is
  * visible instead of a "wasted" figure. Three clearly-separated numbers.
@@ -37,7 +37,7 @@ export function ImpactTrio({ metrics, forecast }: { metrics: SuccessMetrics; for
   return (
     <section class="card impact">
       <header class="impact-head">
-        <span class="section-title">Session cost</span>
+        <span class="section-title">Total cost</span>
         <span class="impact-hint">▲ last turn</span>
       </header>
       <div class="impact-trio">

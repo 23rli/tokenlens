@@ -6,9 +6,9 @@ const PALETTE = ['#539bf5', '#d29922', '#3fb950', '#a371f7', '#f85149', '#8b949e
 
 /**
  * "Where tokens go" — the real cost driver. Shows the split (system / tools /
- * history / message) both for the LATEST prompt and for the WHOLE session, as two
- * bars that share one legend. Data comes straight from Copilot's on-disk
- * `promptTokenDetails`.
+ * history / message) for the LATEST prompt, THIS chat, and ALL chats in the
+ * workspace, as stacked bars that share one legend. Data comes straight from
+ * Copilot's on-disk `promptTokenDetails`.
  */
 export function ContextPanel({
   breakdown,
@@ -89,7 +89,7 @@ export function ContextPanel({
       {session && (
         <>
           <div class="context-barrow">
-            <span class="context-barlabel">Whole session</span>
+            <span class="context-barlabel">This chat</span>
             <span class="context-barval">{fmtNum(session.totalTokens)}</span>
           </div>
           {bar(session.slices)}
@@ -100,7 +100,7 @@ export function ContextPanel({
         <>
           <div class="context-barrow">
             <span class="context-barlabel">
-              Whole chat{chatSessionCount && chatSessionCount > 1 ? ` · ${chatSessionCount} chats` : ''}
+              All chats{chatSessionCount && chatSessionCount > 1 ? ` · ${chatSessionCount}` : ''}
             </span>
             <span class="context-barval">{fmtNum(chat.totalTokens)}</span>
           </div>
