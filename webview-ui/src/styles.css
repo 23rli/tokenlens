@@ -1689,14 +1689,14 @@ button.ghost:hover {
    pet-era chrome for the cost-visibility panels. No rounded pills; thin borders;
    big tabular numbers; small uppercase labels.
    =========================================================================== */
-.app { gap: 10px; padding: 12px 12px 24px; }
+.app { gap: 8px; padding: 10px 10px 16px; }
 
 /* Flat card: thin border, squared, a coloured left rule for quick scanning. */
 .card {
   border: 1px solid var(--vscode-panel-border, #30363d);
   border-left: 3px solid var(--vscode-panel-border, #30363d);
   background: var(--vscode-editorWidget-background, rgba(255, 255, 255, 0.02));
-  padding: 12px 14px;
+  padding: 9px 12px;
 }
 
 /* -- NOW box (small session header) --------------------------------------- */
@@ -1765,20 +1765,22 @@ button.ghost:hover {
 .gauge-graphwrap { margin-top: 12px; }
 .gauge-graphtitle {
   display: block; font-size: 10px; letter-spacing: 0.4px; text-transform: uppercase;
-  color: var(--vscode-descriptionForeground, #8b949e); margin-bottom: 4px;
+  color: var(--vscode-descriptionForeground, #8b949e); margin-bottom: 5px;
 }
 .gauge-graph { display: flex; gap: 6px; }
 .gauge-yaxis {
   display: flex; flex-direction: column; justify-content: space-between; align-items: flex-end;
-  width: 34px; height: 44px; font-size: 9px; color: var(--vscode-descriptionForeground, #8b949e);
+  width: 34px; height: 68px; font-size: 9px; color: var(--vscode-descriptionForeground, #8b949e);
   font-variant-numeric: tabular-nums;
 }
-.gauge-spark {
-  flex: 1; display: flex; align-items: flex-end; gap: 2px; height: 44px;
+.gauge-plot {
+  position: relative; flex: 1; height: 68px;
   border-left: 1px solid var(--vscode-panel-border, #30363d);
-  border-bottom: 1px solid var(--vscode-panel-border, #30363d); padding: 0 0 1px 2px;
+  border-bottom: 1px solid var(--vscode-panel-border, #30363d);
 }
+.gauge-spark { position: absolute; inset: 0 0 1px 2px; display: flex; align-items: flex-end; gap: 2px; }
 .gauge-bar { flex: 1; min-width: 2px; transition: height 0.3s ease; }
+.gauge-trend { position: absolute; inset: 0 0 1px 2px; width: calc(100% - 2px); height: calc(100% - 1px); pointer-events: none; opacity: 0.75; }
 .gauge-sparkaxis {
   display: flex; justify-content: space-between; margin: 3px 0 0 40px;
   font-size: 10px; color: var(--vscode-descriptionForeground, #8b949e);

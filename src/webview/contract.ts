@@ -180,6 +180,8 @@ export interface ForecastView {
   turnCount: number;
   /** Real input tokens per turn, oldest→newest, for the context-growth bar graph. */
   contextSeries: number[];
+  /** Prompt excerpt per turn, aligned with contextSeries, for the graph tooltip. */
+  turnPrompts?: string[];
   /** Where the last real turn's input tokens went (system/tools/history/message). */
   contextBreakdown?: ContextSlice[];
   /** Total input tokens of the last real turn (denominator for the breakdown). */

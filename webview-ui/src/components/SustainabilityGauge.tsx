@@ -60,25 +60,38 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
 
       {series.length > 1 && (
         <div class="gauge-graphwrap">
-          <span class="gauge-graphtitle">Tokens carried each turn</span>
+          <span class="gauge-graphtitle">Tokens carried each turn · hover a bar for its prompt</span>
           <div class="gauge-graph">
             <div class="gauge-yaxis">
               <span>{fmtNum(peak)}</span>
               <span>0</span>
             </div>
-            <div class="gauge-spark">
-              {series.map((v, i) => (
-                <span
-                  key={i}
-                  class="gauge-bar"
-                  title={`Turn ${i + 1}: ${fmtNum(v)} tokens`}
-                  style={{
-                    height: `${Math.max(3, Math.round((v / peak) * 100))}%`,
-                    background: i === series.length - 1 ? band.color : 'var(--vscode-descriptionForeground, #8b949e)',
-                    opacity: i === series.length - 1 ? 1 : 0.45,
-                  }}
+            <div class="gauge-plot">
+              <div class="gauge-spark">
+                {series.map((v, i) => (
+                  <span
+                    key={i}
+                    class="gauge-bar"
+                    title={`Turn ${i + 1}: ${fmtNum(v)} tokens${f?.turnPrompts?.[i] ? ` — "${f.turnPrompts[i]}"` : ''}`}
+                    style={{
+                      height: `${Math.max(2, Math.round((v / peak) * 100))}%`,
+                      background: i === series.length - 1 ? band.color : 'var(--vscode-descriptionForeground, #8b949e)',
+                      opacity: i === series.length - 1 ? 1 : 0.4,
+                    }}
+                  />
+                ))}
+              </div>
+              <svg class="gauge-trend" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <polyline
+                  points={series
+                    .map((v, i) => `${(i / (series.length - 1)) * 100},${100 - Math.max(2, (v / peak) * 100)}`)
+                    .join(' ')}
+                  fill="none"
+                  stroke={band.color}
+                  stroke-width="1.2"
+                  vector-effect="non-scaling-stroke"
                 />
-              ))}
+              </svg>
             </div>
           </div>
           <div class="gauge-sparkaxis">

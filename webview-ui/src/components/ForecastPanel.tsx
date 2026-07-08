@@ -38,10 +38,15 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
         </div>
 
         <div class="next-detail">
-          tokens in
-          {f?.predictedCredits != null && <> · ≈ {Math.round(f.predictedCredits).toLocaleString()} credits next</>}
-          {f && <> · likely {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)}</>}
-          {f && f.confidence < 0.4 && <span class="next-hedge"> · low confidence</span>}
+          {f ? (
+            <>
+              {f.predictedCredits != null && <>≈ {Math.round(f.predictedCredits).toLocaleString()} credits · </>}
+              likely {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)}
+              {f.confidence < 0.4 && <span class="next-hedge"> · low conf.</span>}
+            </>
+          ) : (
+            'likely —'
+          )}
         </div>
 
         {f && f.accuracySamples > 0 && (

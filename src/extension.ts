@@ -145,6 +145,7 @@ export function activate(context: vscode.ExtensionContext): void {
           lastPromptPreview: current.promptText.replace(/\s+/g, ' ').trim().slice(0, 140),
           turnCount: real.length,
           contextSeries: real.map((e) => e.tokens!.inputTokens),
+          turnPrompts: real.map((e) => e.promptText.replace(/\s+/g, ' ').trim().slice(0, 70)),
           realLastInputTokens: lastReal?.tokens?.inputTokens,
           realLastCredits: lastReal?.tokens?.copilotCredits ?? lastReal?.tokens?.estimatedCredits,
           contextBreakdown: lastReal?.tokens?.contextBreakdown,
@@ -433,6 +434,7 @@ function buildForecastView(f: Forecast, acc: ForecastAccuracy, event: PromptEven
   lastPromptPreview?: string;
   turnCount: number;
   contextSeries: number[];
+  turnPrompts?: string[];
   realLastInputTokens?: number;
   realLastCredits?: number;
   contextBreakdown?: ContextSlice[];
@@ -481,6 +483,7 @@ function buildForecastView(f: Forecast, acc: ForecastAccuracy, event: PromptEven
     lastPromptPreview: extras.lastPromptPreview,
     turnCount: extras.turnCount,
     contextSeries: extras.contextSeries,
+    turnPrompts: extras.turnPrompts,
     contextBreakdown: extras.contextBreakdown,
     contextInputTokens: extras.contextInputTokens,
     sessionBreakdown: extras.sessionBreakdown,
