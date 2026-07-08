@@ -1,16 +1,13 @@
 import * as vscode from 'vscode';
 import type { TamaStore } from '../state/tamaStore';
-import type { AutoRewriteView, ComposeResult, HostMessage, WebviewMessage } from './contract';
+import type { HostMessage, WebviewMessage } from './contract';
 import { buildDashboardHtml } from './html';
 
 export interface DashboardHandlers {
   toggleCapture: () => void;
-  scoreDraft: (text: string) => ComposeResult;
-  autoRewrite: (text: string) => Promise<AutoRewriteView>;
-  copyToCopilot: (input: { text: string; adopted: boolean }) => void;
 }
 
-/** Sidebar webview that renders the pet, metrics, and coaching panel. */
+/** Sidebar webview that renders the Token Lens cost + forecast dashboard. */
 export class DashboardViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'tokentama.dashboard';
 
@@ -47,41 +44,11 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
       case 'ready':
         this.post({ type: 'state', state: this.store.getState() });
         break;
-      case 'scorePrompt':
-        void vscode.commands.executeCommand('tokentama.scorePrompt');
-        break;
       case 'reset':
         void vscode.commands.executeCommand('tokentama.resetEcosystem');
         break;
       case 'toggleCapture':
         this.handlers.toggleCapture();
-        break;
-      case 'runDemo':
-        this.post({ type: 'busy', busy: true });
-        void Promise.resolve(
-          vscode.commands.executeCommand('tokentama.runDemo'),
-        ).finally(() => this.post({ type: 'busy', busy: false }));
-        break;
-      case 'applyTip':
-        void vscode.env.clipboard.writeText(msg.rewrittenPrompt);
-        this.store.markTipApplied();
-        void vscode.window.showInformationMessage(
-          'Rewritten prompt copied to clipboard — paste it into Copilot Chat.',
-        );
-        break;
-      case 'copyTip':
-        void vscode.env.clipboard.writeText(msg.text);
-        break;
-      case 'composeInput':
-        this.post({ type: 'composeResult', result: this.handlers.scoreDraft(msg.text) });
-        break;
-      case 'autoRewrite':
-        void this.handlers
-          .autoRewrite(msg.text)
-          .then((result) => this.post({ type: 'autoRewriteResult', result }));
-        break;
-      case 'copyToCopilot':
-        this.handlers.copyToCopilot({ text: msg.text, adopted: msg.adopted });
         break;
       case 'compactSession':
         void vscode.commands.executeCommand('tokentama.compactSession');

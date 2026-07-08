@@ -1,30 +1,17 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
-import type { CoachConfig, CoachProvider } from '@tokentama/llm-adapters';
 import { TamaStore } from './state/tamaStore';
-import { ScoreService } from './core/scoreService';
 import { CopilotWatcher } from './capture/CopilotWatcher';
 import { findActiveSession, listCopilotSessions } from './capture/copilotPaths';
 import { readSessionEvents, readSessionTitle } from './capture/copilotReader';
 import { StatusBar } from './status/statusBar';
 import { DashboardViewProvider } from './webview/DashboardViewProvider';
-import { TelemetryService } from './telemetry/telemetryService';
-import { hashText } from './telemetry/hash';
-import type { TelemetryEvent } from './types/Telemetry';
-import { CorpusStore } from './data/corpusStore';
-import { RewriteService, type RewriteConfig, type RewriterMode } from './rewriter/rewriteService';
-import { summarizeContext, historyAdvisory } from './analysis/contextBreakdown';
 import { buildSessionSummary } from './analysis/sessionSummary';
-import { computeOutcomes } from './analysis/outcomes';
-import { buildPortfolio, renderPortfolio } from './analysis/userPortfolio';
-import { extractTargets, deriveInsights } from './analysis/corpusInsights';
 import { ForecastService, type ForecastAccuracy } from './analysis/forecastService';
 import type { Forecast } from './analysis/forecast';
 import type { ForecastView } from './webview/contract';
 import type { PromptEvent, ContextSlice } from '@tokentama/shared-types';
 import { estimateCredits } from '@tokentama/scoring-engine';
-
-const SECRET_KEY = 'tokentama.llmApiKey';
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new TamaStore(context);
@@ -40,46 +27,6 @@ export function activate(context: vscode.ExtensionContext): void {
     workspaceHash
       ? `Capture scoped to this window's workspace storage (${workspaceHash}).`
       : 'No workspace folder open — capture tracks the most recent Copilot session in ANY window. Open a folder for window-scoped capture.',
-  );
-
-  const getCoachConfig = async (): Promise<CoachConfig> => {
-    const cfg = vscode.workspace.getConfiguration('tokentama.coaching');
-    const apiKey = await context.secrets.get(SECRET_KEY);
-    return {
-      provider: cfg.get<string>('llmProvider', 'none') as CoachProvider,
-      endpoint: cfg.get<string>('endpoint') || undefined,
-      apiKey: apiKey || undefined,
-      deployment: cfg.get<string>('model') || undefined,
-      apiVersion: '2024-10-21',
-      timeoutMs: 12000,
-    };
-  };
-
-  const telemetry = new TelemetryService(hashText(vscode.env.machineId));
-  context.subscriptions.push(telemetry);
-
-  const corpus = new CorpusStore(
-    context.globalStorageUri.fsPath,
-    () => vscode.workspace.getConfiguration('tokentama.corpus').get<boolean>('enabled', true),
-    () => vscode.workspace.getConfiguration('tokentama.corpus').get<boolean>('storeRawText', true),
-  );
-  // Close the quality loop: outcomes (retry reduction from adoption) computed lazily
-  // from the in-memory corpus and surfaced in state.
-  store.setOutcomesProvider(() => computeOutcomes(corpus.all(), store.toolSpend()));
-
-  // Compact, continuously-updated profile that the rewriter runs off of (cached
-  // by corpus size — recomputed only as the corpus grows).
-  let portfolioCache: { size: number; text: string } | undefined;
-  const getPortfolio = (): string => {
-    const records = corpus.all();
-    if (!portfolioCache || portfolioCache.size !== records.length) {
-      portfolioCache = { size: records.length, text: renderPortfolio(buildPortfolio(records)) };
-    }
-    return portfolioCache.text;
-  };
-
-  const scoreService = new ScoreService(store, getCoachConfig, log, telemetry, corpus, () =>
-    corpus.all(),
   );
 
   // Precognition core: rebuild the live forecast from the ACTIVE session on disk
@@ -237,49 +184,11 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   };
 
-  const getRewriteConfig = async (): Promise<RewriteConfig> => {
-    const cfg = vscode.workspace.getConfiguration('tokentama.rewriter');
-    const coach = await getCoachConfig();
-    const model = cfg.get<string>('model')?.trim();
-    return {
-      mode: cfg.get<string>('mode', 'auto') as RewriterMode,
-      fewShotK: cfg.get<number>('fewShotK', 3),
-      coach: model ? { ...coach, deployment: model } : coach,
-    };
-  };
-  const rewriteService = new RewriteService(corpus, getRewriteConfig, lmRewrite, getPortfolio, log);
-
   const statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
 
   store.onDidChange((state) => statusBar.update(state));
   statusBar.update(store.getState());
-
-  // Proactive, once-per-bloat nudge: when the chat's history grows large enough to
-  // be worth compacting, surface it prominently with a one-click action. Re-arms
-  // after history drops (i.e. a fresh chat), so it fires once per bloated session.
-  let historyNudged = false;
-  store.onDidChange((state) => {
-    const summary = summarizeContext(
-      state.lastEvent?.contextBreakdown,
-      state.lastEvent?.inputTokens ?? 0,
-    );
-    const advisory = historyAdvisory(summary);
-    if (advisory?.recommend && !historyNudged) {
-      historyNudged = true;
-      const kt = Math.round(advisory.conversationTokens / 1000);
-      void vscode.window
-        .showWarningMessage(
-          `Tokentama: this chat carries ~${kt}k tokens of history — re-sent on every turn. Compact it to a lean summary?`,
-          'Start fresh chat (summary copied)',
-        )
-        .then((choice) => {
-          if (choice) void vscode.commands.executeCommand('tokentama.compactSession');
-        });
-    } else if (!advisory?.recommend) {
-      historyNudged = false;
-    }
-  });
 
   let watcher: CopilotWatcher | undefined;
   const startWatcher = (): void => {
@@ -287,20 +196,15 @@ export function activate(context: vscode.ExtensionContext): void {
     const captureCfg = vscode.workspace.getConfiguration('tokentama.capture');
     const mode = captureCfg.get<string>('mode', 'hybrid');
     if (mode === 'event') {
-      log(
-        'Capture mode = event: on-disk watcher disabled. Live scoring runs via @tokentama and the compose box; enable hybrid/disk mode to reconcile real tokens.',
-      );
+      log('Capture mode = event: on-disk watcher disabled. Enable hybrid/disk mode to reconcile real tokens.');
       return;
     }
     // Capture scope: 'window' pins to THIS window's sessions; 'all' follows the
-    // globally-newest Copilot session across every window (use when Tokentama
-    // runs in a different window than the one you code in).
+    // globally-newest Copilot session across every window.
     const scope = captureCfg.get<string>('scope', 'all');
     const hashScope = scope === 'all' ? undefined : workspaceHash;
     if (scope !== 'all' && !workspaceHash) {
-      log(
-        'Ambient capture paused: this window has no folder open, so there is no window-scoped Copilot session. Open a folder, set "tokentama.capture.scope" to "all", or use @tokentama / the compose box.',
-      );
+      log('Ambient capture paused: this window has no folder open. Open a folder or set "tokentama.capture.scope" to "all".');
       return;
     }
     watcher = new CopilotWatcher((event, meta) => {
@@ -314,7 +218,6 @@ export function activate(context: vscode.ExtensionContext): void {
         // real metered tokens and refresh the panel (skeletons fill in).
         refreshForecast();
       }
-      void scoreService.scoreEvent(event, 'copilot', { preliminary: meta?.preliminary });
     }, hashScope);
     watcher.start();
     context.subscriptions.push(watcher);
@@ -338,58 +241,8 @@ export function activate(context: vscode.ExtensionContext): void {
     log(`passive capture ${next ? 'enabled' : 'disabled'}.`);
   };
 
-  const copyToCopilot = ({ text, adopted }: { text: string; adopted: boolean }): void => {
-    void vscode.env.clipboard.writeText(text);
-    if (adopted) store.markTipApplied();
-    telemetry.suggestionShown({ sessionId: 'compose', source: 'compose', promptText: text });
-    telemetry.suggestionAdopted({
-      sessionId: 'compose',
-      source: 'compose',
-      promptText: text,
-      adopted,
-    });
-  };
-
   const provider = new DashboardViewProvider(context.extensionUri, store, {
     toggleCapture,
-    scoreDraft: (text) => scoreService.scoreDraft(text),
-    autoRewrite: async (text) => {
-      const state = store.getState();
-      const model = state.model?.family;
-      const recentContext = buildRecentContext(state.recentEvents, corpus.all(), text);
-      // Only spend a model call when it's likely to HELP (vague / retry-prone /
-      // wasteful) and we're under the session rewrite-token budget. Verbose-but-clear
-      // prompts get the free offline cleanup instead — protects net savings from
-      // speculative spend that would never be adopted.
-      const draft = scoreService.scoreDraft(text);
-      const beneficial =
-        draft.retryRisk === 'high' ||
-        draft.retryRisk === 'medium' ||
-        !!draft.contextGapHint ||
-        draft.overallScore < 70;
-      const budget = vscode.workspace
-        .getConfiguration('tokentama.rewriter')
-        .get<number>('sessionTokenBudget', 20000);
-      const withinBudget = budget <= 0 || store.toolSpend() < budget;
-      const allowModel = beneficial && withinBudget;
-      const r = await rewriteService.rewrite({ promptText: text, model, recentContext, allowModel });
-      if (r.llmTokensSpent) store.addToolSpend(r.llmTokensSpent);
-      const skipped = allowModel ? '' : ` (model skipped: ${!withinBudget ? 'budget' : 'low benefit'})`;
-      log(
-        `Rewrite requested — source: ${r.source}${
-          r.llmTokensSpent ? `, spent ~${r.llmTokensSpent} tokens` : ''
-        }${skipped}.`,
-      );
-      return {
-        text,
-        rewrittenPrompt: r.rewrittenPrompt,
-        estimatedTokenReductionPct: r.estimatedTokenReductionPct,
-        estimatedTokensSaved: r.estimatedTokensSaved,
-        source: r.source,
-        examplesUsed: r.examplesUsed,
-      };
-    },
-    copyToCopilot,
   });
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(DashboardViewProvider.viewType, provider, {
@@ -433,38 +286,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   /* disposables are cleaned up via context.subscriptions */
-}
-
-/**
- * Build a compact "session context" string for the rewriter from recent scored
- * prompts and the user's frequent corpus targets, so it can resolve vague
- * references ("the component") to files already discussed — without inventing.
- */
-function buildRecentContext(
-  recentEvents: { promptPreview: string }[] | undefined,
-  records: { promptText?: string }[],
-  currentText: string,
-): string | undefined {
-  const already = new Set(extractTargets(currentText));
-  const files: string[] = [];
-  const addFiles = (text: string): void => {
-    for (const t of extractTargets(text)) {
-      if (!already.has(t) && !files.includes(t)) files.push(t);
-    }
-  };
-  for (const e of recentEvents ?? []) addFiles(e.promptPreview);
-  for (const t of deriveInsights(records as never).topTargets) {
-    if (!already.has(t) && !files.includes(t)) files.push(t);
-  }
-  const recentAsks = (recentEvents ?? [])
-    .slice(0, 2)
-    .map((e) => e.promptPreview?.trim())
-    .filter((p): p is string => !!p);
-
-  const parts: string[] = [];
-  if (files.length) parts.push(`Files/targets recently worked on: ${files.slice(0, 5).join(', ')}`);
-  if (recentAsks.length) parts.push(`Recent asks: ${recentAsks.map((a) => `“${a}”`).join(' | ')}`);
-  return parts.length ? parts.join('\n') : undefined;
 }
 
 /**
@@ -551,86 +372,6 @@ function buildForecastView(f: Forecast, acc: ForecastAccuracy, event: PromptEven
     chatCreditsEstimated: extras.chatCreditsEstimated,
     chatCostUsd: extras.chatCostUsd,
   };
-}
-
-/**
- * Rewrite completion backed by the VS Code Language Model API — uses the user's
- * OWN Copilot models (no API key). Throws if the LM is unavailable or unauthorized
- * so the rewriter falls back to the offline cleanup.
- */
-async function lmRewrite(system: string, user: string): Promise<string> {
-  if (!vscode.lm?.selectChatModels) throw new Error('LM API unavailable');
-  let models = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4o-mini' });
-  if (models.length === 0) models = await vscode.lm.selectChatModels({ vendor: 'copilot' });
-  const model = models[0];
-  if (!model) throw new Error('No language model available');
-  const messages = [vscode.LanguageModelChatMessage.User(`${system}\n\n${user}`)];
-  const source = new vscode.CancellationTokenSource();
-  const timeout = setTimeout(() => source.cancel(), 20000);
-  try {
-    const res = await model.sendRequest(messages, {}, source.token);
-    let out = '';
-    for await (const part of res.text) out += part;
-    return out;
-  } finally {
-    clearTimeout(timeout);
-    source.dispose();
-  }
-}
-
-function registerChatParticipant(
-  context: vscode.ExtensionContext,
-  scoreService: ScoreService,
-  store: TamaStore,
-  log: (message: string) => void,
-): void {
-  if (!vscode.chat?.createChatParticipant) {
-    log('Chat participant API unavailable in this VS Code version.');
-    return;
-  }
-  try {
-    const participant = vscode.chat.createChatParticipant(
-      'tokentama.chat',
-      async (request, _chatContext, response) => {
-        const text = request.prompt?.trim();
-        if (!text) {
-          response.markdown('Type a prompt after `@tokentama` and I’ll score its efficiency.');
-          return;
-        }
-        const score = await scoreService.scoreManualText(text);
-        const state = store.getState();
-        const ev = state.lastEvent;
-        response.markdown(
-          `**Tokentama score: ${Math.round(score)}/100**  ·  waste ${Math.round(
-            ev?.wasteScore ?? 0,
-          )}  ·  ecosystem _${state.world}_\n\n`,
-        );
-        const top = (ev?.wasteBreakdown ?? [])
-          .filter((c) => c.severity > 0.05)
-          .sort((a, b) => b.weightedPoints - a.weightedPoints)
-          .slice(0, 3);
-        if (top.length > 0) {
-          response.markdown(
-            top.map((c) => `- **${c.category}** — ${c.reason}`).join('\n') + '\n\n',
-          );
-        }
-        if (state.tip) {
-          response.markdown(`💡 ${state.tip.message}\n`);
-          if (state.tip.rewrittenPrompt) {
-            response.markdown(
-              `\n**Leaner rewrite:**\n\n\`\`\`\n${state.tip.rewrittenPrompt}\n\`\`\``,
-            );
-          }
-        }
-        log(`@tokentama scored a prompt → ${Math.round(score)}/100`);
-      },
-    );
-    participant.iconPath = vscode.Uri.joinPath(context.extensionUri, 'media', 'icon.png');
-    context.subscriptions.push(participant);
-    log('Chat participant @tokentama registered.');
-  } catch (err) {
-    log(`Failed to register chat participant: ${String(err)}`);
-  }
 }
 
 function deriveWorkspaceHash(context: vscode.ExtensionContext): string | undefined {
@@ -773,240 +514,6 @@ function captureSelfTest(
 
   for (const line of lines) output.appendLine(line);
   output.show(true);
-}
-
-async function rescanCopilot(
-  scoreService: ScoreService,
-  log: (message: string) => void,
-  onlyHash?: string,
-): Promise<void> {
-  const active = findActiveSession(undefined, onlyHash);
-  if (!active) {
-    log('rescan: no active Copilot session found on disk.');
-    void vscode.window.showInformationMessage(
-      'Tokentama: no Copilot chat sessions found on disk yet. Send a Copilot prompt first.',
-    );
-    return;
-  }
-  const recent = readSessionEvents(active)
-    .filter((e) => e.promptText.trim())
-    .slice(-3);
-  if (recent.length === 0) {
-    void vscode.window.showInformationMessage(
-      'Tokentama: the latest Copilot session has no prompts to score yet.',
-    );
-    return;
-  }
-  for (const event of recent) {
-    await scoreService.scoreEvent(event, 'copilot');
-  }
-  log(`rescan: scored ${recent.length} recent prompt(s) from session ${active.sessionId}.`);
-  await vscode.commands.executeCommand('tokentama.dashboard.focus');
-  void vscode.window.showInformationMessage(
-    `Tokentama scored your ${recent.length} most recent Copilot prompt(s).`,
-  );
-}
-
-async function scoreManualPrompt(scoreService: ScoreService): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  const selected =
-    editor && !editor.selection.isEmpty
-      ? editor.document.getText(editor.selection)
-      : undefined;
-
-  const text =
-    selected ??
-    (await vscode.window.showInputBox({
-      prompt: 'Paste a prompt to score for efficiency',
-      placeHolder: 'e.g. "Could you please, if it is not too much trouble, kindly help me…"',
-      ignoreFocusOut: true,
-    }));
-
-  if (!text || !text.trim()) return;
-
-  const score = await scoreService.scoreManualText(text);
-  await vscode.commands.executeCommand('tokentama.dashboard.focus');
-  void vscode.window.showInformationMessage(`Tokentama score: ${Math.round(score)} / 100`);
-}
-
-async function setLlmApiKey(context: vscode.ExtensionContext): Promise<void> {
-  const key = await vscode.window.showInputBox({
-    prompt: 'Enter the API key for your coaching LLM provider (stored securely)',
-    password: true,
-    ignoreFocusOut: true,
-  });
-  if (key === undefined) return;
-  if (key.trim() === '') {
-    await context.secrets.delete(SECRET_KEY);
-    void vscode.window.showInformationMessage('Tokentama coaching API key cleared.');
-  } else {
-    await context.secrets.store(SECRET_KEY, key);
-    void vscode.window.showInformationMessage('Tokentama coaching API key saved.');
-  }
-}
-
-/**
- * Export locally-buffered pilot telemetry as JSON + CSV to a folder the user
- * picks. This is the explicit, consented handoff path — the only way pilot data
- * leaves the buffer. Includes before/after session deltas from metrics.
- */
-async function exportPilotData(
-  store: TamaStore,
-  telemetry: TelemetryService,
-  log: (message: string) => void,
-): Promise<void> {
-  const events = telemetry.snapshot();
-  if (events.length === 0) {
-    void vscode.window.showInformationMessage(
-      'Tokentama: no pilot data collected yet. Enable "tokentama.telemetry.enabled" and score some prompts first.',
-    );
-    return;
-  }
-  const metrics = store.getState().metrics;
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const summary = {
-    exportedAt: new Date().toISOString(),
-    eventCount: events.length,
-    metrics,
-    outcomes: store.getState().outcomes,
-  };
-  const json = JSON.stringify({ summary, events }, null, 2);
-
-  const cols = [
-    'timestamp',
-    'name',
-    'sessionId',
-    'source',
-    'model',
-    'reasoningEffort',
-    'dominantCategory',
-    'overallScore',
-    'wasteScore',
-    'inputTokens',
-    'outputTokens',
-    'estimatedCostUsd',
-    'retryCount',
-    'promptHash',
-  ];
-  const cell = (e: TelemetryEvent, key: string): string => {
-    const raw =
-      key === 'timestamp'
-        ? e.timestamp
-        : key === 'name'
-          ? e.name
-          : key === 'sessionId'
-            ? e.sessionId
-            : (e.properties?.[key] ?? e.measurements?.[key] ?? '');
-    const s = String(raw).replace(/"/g, '""');
-    return /[",\n]/.test(s) ? `"${s}"` : s;
-  };
-  const csv = [cols.join(',')]
-    .concat(events.map((e) => cols.map((c) => cell(e, c)).join(',')))
-    .join('\n');
-
-  const folder = await vscode.window.showOpenDialog({
-    canSelectFolders: true,
-    canSelectFiles: false,
-    canSelectMany: false,
-    openLabel: 'Export Tokentama pilot data here',
-  });
-  if (!folder || folder.length === 0) return;
-  const dir = folder[0];
-  const enc = new TextEncoder();
-  await vscode.workspace.fs.writeFile(
-    vscode.Uri.joinPath(dir, `tokentama-pilot-${stamp}.json`),
-    enc.encode(json),
-  );
-  await vscode.workspace.fs.writeFile(
-    vscode.Uri.joinPath(dir, `tokentama-pilot-${stamp}.csv`),
-    enc.encode(csv),
-  );
-  log(`exportPilotData: wrote ${events.length} events to ${dir.fsPath}`);
-  void vscode.window.showInformationMessage(
-    `Tokentama pilot data exported (${events.length} events) to ${dir.fsPath}.`,
-  );
-}
-
-/**
- * Backfill the local training corpus from the user's ENTIRE Copilot history on
- * disk (every session, every window). Scores each turn offline and records the
- * original prompt + its lean rewrite — the substrate for training an auto-rewriter.
- */
-async function ingestHistory(
-  scoreService: ScoreService,
-  corpus: CorpusStore,
-  log: (message: string) => void,
-  _onlyHash?: string,
-): Promise<void> {
-  const before = corpus.count();
-  let scanned = 0;
-  await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'Tokentama: ingesting Copilot history…' },
-    async () => {
-      let sessions: ReturnType<typeof listCopilotSessions> = [];
-      try {
-        sessions = listCopilotSessions(undefined, undefined);
-      } catch {
-        sessions = [];
-      }
-      scoreService.beginIngest();
-      for (const session of sessions) {
-        let events: ReturnType<typeof readSessionEvents> = [];
-        try {
-          events = readSessionEvents(session);
-        } catch {
-          continue;
-        }
-        for (const ev of events) {
-          if (!ev.promptText.trim()) continue;
-          scoreService.ingestToCorpus(ev);
-          scanned++;
-        }
-      }
-    },
-  );
-  const added = corpus.count() - before;
-  log(`ingestHistory: scanned ${scanned} turns, added ${added} new corpus record(s) (total ${corpus.count()}).`);
-  void vscode.window.showInformationMessage(
-    `Tokentama ingested ${added} new prompt(s) from your Copilot history (corpus: ${corpus.count()}).`,
-  );
-}
-
-/**
- * Export the local corpus as JSONL plus a training-ready file of
- * (original prompt → lean rewrite) pairs, to a folder the user picks.
- */
-async function exportCorpus(corpus: CorpusStore, log: (message: string) => void): Promise<void> {
-  const records = corpus.all();
-  if (records.length === 0) {
-    void vscode.window.showInformationMessage(
-      'Tokentama: the corpus is empty. Run "Ingest Copilot history" or let capture collect some prompts first.',
-    );
-    return;
-  }
-  const pairs = corpus.trainingPairs();
-  const folder = await vscode.window.showOpenDialog({
-    canSelectFolders: true,
-    canSelectFiles: false,
-    canSelectMany: false,
-    openLabel: 'Export Tokentama corpus here',
-  });
-  if (!folder || folder.length === 0) return;
-  const dir = folder[0];
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const enc = new TextEncoder();
-  await vscode.workspace.fs.writeFile(
-    vscode.Uri.joinPath(dir, `tokentama-corpus-${stamp}.jsonl`),
-    enc.encode(records.map((r) => JSON.stringify(r)).join('\n')),
-  );
-  await vscode.workspace.fs.writeFile(
-    vscode.Uri.joinPath(dir, `tokentama-corpus-training-${stamp}.jsonl`),
-    enc.encode(pairs.map((p) => JSON.stringify(p)).join('\n')),
-  );
-  log(`exportCorpus: wrote ${records.length} records and ${pairs.length} training pairs to ${dir.fsPath}`);
-  void vscode.window.showInformationMessage(
-    `Tokentama corpus exported: ${records.length} records, ${pairs.length} training pairs → ${dir.fsPath}.`,
-  );
 }
 
 /**

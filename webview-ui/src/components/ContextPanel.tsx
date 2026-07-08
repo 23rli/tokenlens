@@ -1,6 +1,7 @@
 import type { ContextSlice } from '../../../src/webview/contract';
 import { summarizeContext } from '../../../src/analysis/contextBreakdown';
 import { fmtNum } from '../format';
+import { Tip } from './Tip';
 
 const PALETTE = ['#539bf5', '#d29922', '#3fb950', '#a371f7', '#f85149', '#8b949e'];
 
@@ -77,12 +78,9 @@ export function ContextPanel({
   return (
     <section class="card context">
       <div class="context-head">
-        <span
-          class="section-title"
-          title="Input tokens by scope: this prompt → this chat → all chats in this workspace."
-        >
-          Where tokens go
-        </span>
+        <Tip text="Input tokens by scope: this prompt → this chat → all chats in this workspace.">
+          <span class="section-title">Where tokens go</span>
+        </Tip>
       </div>
 
       <div class="context-barrow">

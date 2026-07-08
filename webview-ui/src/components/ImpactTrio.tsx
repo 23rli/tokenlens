@@ -1,5 +1,6 @@
 import type { SuccessMetrics, ForecastView } from '../../../src/webview/contract';
 import { fmtNum, fmtUsd } from '../format';
+import { Tip } from './Tip';
 
 /**
  * Total cost, anchored on MEASURED units: tokens and Copilot credits (AICs) are
@@ -47,9 +48,9 @@ export function ImpactTrio({ metrics, forecast }: { metrics: SuccessMetrics; for
   return (
     <section class="card impact">
       <header class="impact-head">
-        <span class="section-title" title="Everything metered across all chats in this workspace.">
-          Total cost
-        </span>
+        <Tip text="Everything metered across all chats in this workspace.">
+          <span class="section-title">Total cost</span>
+        </Tip>
         <span class="impact-hint">▲ last turn</span>
       </header>
       <div class="impact-trio">

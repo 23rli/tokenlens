@@ -1,5 +1,6 @@
 import type { ForecastView } from '../../../src/webview/contract';
 import { fmtNum } from '../format';
+import { Tip } from './Tip';
 
 /**
  * The chat header + the two headline numbers side by side: LAST TURN (the real
@@ -20,7 +21,7 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
         </div>
       </section>
 
-      <section class="card next" title="What your next prompt will cost, predicted from recent turns.">
+      <section class="card next">
         <div class="next-cols">
           <div class="next-col">
             <span class="next-kicker">Last turn</span>
@@ -30,7 +31,9 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
           </div>
           <div class="next-arrow">→</div>
           <div class="next-col">
-            <span class="next-kicker">Next turn (est.)</span>
+            <Tip text="What your next prompt will cost, predicted from your recent turns.">
+              <span class="next-kicker">Next turn (est.)</span>
+            </Tip>
             <span class={`next-number next-pred${f ? '' : ' muted'}`}>
               {f ? fmtNum(f.predictedInputTokens) : '—'}
             </span>

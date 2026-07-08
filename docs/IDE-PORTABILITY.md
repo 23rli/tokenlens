@@ -40,3 +40,36 @@ The cleanest route to multi-IDE is to **stop scraping VS Code's private logs** a
 If token/context data can come from the LSP or a GitHub API, the data layer unifies, and the remaining work is just "port the engine + reuse the UI" per host. Until then, each IDE needs a bespoke log parser, and VS/JetBrains may not expose the per-turn detail Token Lens depends on.
 
 **Bottom line:** the UI and the analytics travel well; the risk is entirely in the per-IDE Copilot data access. De-risk by proving a shared data source (Copilot LSP or GitHub usage API) before committing to a Visual Studio or JetBrains port.
+
+## “But Visual Studio HAS Copilot — why doesn’t this just work?”
+
+Right — Copilot is in Visual Studio. The catch is that Token Lens doesn’t read Copilot
+itself; it reads a **specific on-disk artifact that only VS Code’s Copilot writes**: the
+`chatSessions` / transcript JSON with per-turn `promptTokenDetails`. Visual Studio’s
+Copilot is a **different implementation** that:
+
+- does **not** write those VS Code files,
+- stores its chat/telemetry elsewhere, in a different (undocumented) format, and
+- may not persist a per-turn token/context breakdown to disk **at all**.
+
+So the blocker isn’t “Copilot is missing” — it’s “the exact data file we parse is VS-Code-only.”
+
+### How to unlock it (best → fastest)
+
+1. **Copilot Language Server (LSP).** Copilot’s core runs as a language server that
+   multiple IDEs embed. If it emits (or can be queried for) token/usage events, a thin
+   adapter becomes a **cross-IDE** data source — the real long-term foundation. Needs
+   reverse-engineering or a partnership; not a public usage API today.
+2. **GitHub Copilot usage/metering API.** GitHub exposes org/user Copilot usage, but
+   it’s **aggregate (daily)**, not live per-turn — good for a billing dashboard, not for
+   live next-turn forecasting.
+3. **Find VS’s own on-disk logs.** Inspect `%LOCALAPPDATA%\Microsoft\VisualStudio\<ver>\`,
+   the Copilot VS extension’s storage, and activity/temp logs for any per-turn token
+   records. If they exist, write a VS-specific parser. Fastest to prototype; fragile;
+   the data may simply not be there.
+4. **Local proxy.** Intercept Copilot’s API calls via a local proxy the IDE trusts and
+   read token counts from responses. Cross-IDE, but invasive and brittle.
+
+**Recommendation:** prototype (3) to learn whether the per-turn data even exists on disk
+in VS; in parallel evaluate (1), the LSP, as the durable cross-IDE source. Everything
+else (engine + UI) is ready to reuse the moment a data source lands.

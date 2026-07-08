@@ -1,5 +1,6 @@
 import type { ForecastView } from '../../../src/webview/contract';
 import { fmtNum } from '../format';
+import { Tip } from './Tip';
 
 /** Visuals per sustainability band — light (healthy) → overloaded (blows up). */
 const BANDS: Record<
@@ -46,12 +47,9 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
   return (
     <section class={`card gauge${blown ? ' gauge-blown' : ''}`}>
       <header class="gauge-head">
-        <span
-          class="section-title"
-          title="Context loaded in this chat right now — resets when Copilot summarizes."
-        >
-          Context weight
-        </span>
+        <Tip text="Context loaded in this chat right now — resets when Copilot summarizes.">
+          <span class="section-title">Context weight</span>
+        </Tip>
         <span class="gauge-band" style={{ color: f ? band.color : undefined }}>
           {f ? band.label : '—'}
         </span>

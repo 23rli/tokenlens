@@ -1858,6 +1858,31 @@ button.ghost:hover {
 .section-title { font-weight: 600; }
 .gauge-band { font-weight: 700; }
 
+/* -- Reliable hover tooltip (fixed-position bubble, never clipped) -------- */
+.tip { position: relative; display: inline-flex; outline: none; }
+.tip > .section-title,
+.tip > .next-kicker {
+  border-bottom: 1px dotted var(--vscode-descriptionForeground);
+  cursor: help;
+}
+.tip-bubble {
+  position: fixed;
+  z-index: 1000;
+  max-width: 240px;
+  white-space: normal;
+  background: var(--vscode-editorHoverWidget-background, #252526);
+  color: var(--vscode-editorHoverWidget-foreground, var(--vscode-foreground));
+  border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, #454545));
+  padding: 6px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 /* -- Percent labels on the where-tokens-go bars --------------------------- */
 .context .context-bar { height: 18px; border-radius: 3px; }
 .context-seg { display: flex; align-items: center; justify-content: center; overflow: hidden; }

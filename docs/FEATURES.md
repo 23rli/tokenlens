@@ -104,6 +104,13 @@ _Legacy/experimental settings still present: `coaching.*`, `sustainability.*`, `
 
 ---
 
-## 7. Deprecated (pending rebrand & cleanup)
+## 7. Removed / deprecated
 
-The extension originated as a prompt-efficiency **scoring + tamagotchi** tool. That direction was retired in favor of pure cost visibility + forecasting. Still in the codebase but not part of the current product: prompt scoring, the pet/health system, the heuristic/LLM coach, the training corpus, sustainability (CO₂/water) estimates, and the `@tokentama` chat participant. These will be removed or rebranded in the next cleanup pass.
+Token Lens began as a prompt-efficiency **scoring + tamagotchi** tool, then pivoted to
+pure cost visibility + forecasting. Removed from the codebase in the cleanup: the
+prompt **scoring service**, the **rewriter** (auto-rewrite), the deprecated commands
+(score / rescan / demo / ingest / export), the **`@tokentama` chat participant**, and
+the pet/coaching/sustainability settings. Still present but vestigial (behind the
+cost/forecast UI): the pet **health/world** fields on the state contract and the
+**coaching** helper (kept only because the compaction summary reuses one text helper).
+These will be trimmed in a later contract refactor.
