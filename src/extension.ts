@@ -278,12 +278,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   if (store.captureEnabled) startWatcher();
 
-  // Backstop: refresh the forecast shortly after activation and periodically, so
-  // the panel populates from any existing session even before a new turn fires.
-  // Also refresh the moment this window regains focus — you've usually just
-  // finished a Copilot turn, so the just-completed prompt shows up right away.
-  setTimeout(refreshForecast, 1200);
-  const forecastTimer = setInterval(refreshForecast, 2500);
+  // Backstop: refresh the forecast shortly after activation and on a short timer,
+  // so the panel stays live on its own — no reload, no click needed. Also refresh
+  // the moment this window regains focus (you've usually just finished a turn).
+  setTimeout(refreshForecast, 800);
+  const forecastTimer = setInterval(refreshForecast, 1500);
   context.subscriptions.push({ dispose: () => clearInterval(forecastTimer) });
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((s) => {

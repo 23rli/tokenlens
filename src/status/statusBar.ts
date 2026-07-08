@@ -12,7 +12,7 @@ export class StatusBar implements vscode.Disposable {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.item.name = 'Token Lens';
     this.item.command = 'tokentama.openDashboard';
-    this.item.text = '$(eye) Token Lens';
+    this.item.text = '$(graph) Token Lens';
     this.item.tooltip = 'Open Token Lens';
     this.item.show();
   }
@@ -22,10 +22,10 @@ export class StatusBar implements vscode.Disposable {
     if (f && f.loadFraction != null) {
       const pct = Math.round(f.loadFraction * 100);
       const next = Math.round(f.predictedInputTokens).toLocaleString();
-      this.item.text = `$(eye) ${pct}%`;
+      this.item.text = `$(graph) ${pct}%`;
       this.item.tooltip = `Token Lens — context ${pct}% of limit · next turn ≈ ${next} tokens`;
     } else {
-      this.item.text = '$(eye) Token Lens';
+      this.item.text = '$(graph) Token Lens';
       this.item.tooltip = 'Open Token Lens';
     }
   }
