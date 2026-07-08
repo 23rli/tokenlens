@@ -50,14 +50,17 @@ export function ContextPanel({
     return (
       <div class="context-bar">
         {slices.map((s, i) => {
-          const p = Math.round((s.tokens / sum) * 100);
+          const w = (s.tokens / sum) * 100;
+          const p = Math.round(w);
           return (
             <div
               key={`${s.label}-${i}`}
               class="context-seg"
-              style={{ width: `${(s.tokens / sum) * 100}%`, background: colorFor(s.label) }}
+              style={{ width: `${w}%`, background: colorFor(s.label) }}
               title={`${s.label}: ${fmtNum(s.tokens)} tokens (${p}%)`}
-            />
+            >
+              {w >= 10 && <span class="context-seg-pct">{p}%</span>}
+            </div>
           );
         })}
       </div>

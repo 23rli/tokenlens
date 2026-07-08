@@ -6,10 +6,12 @@ import { ForecastPanel } from './components/ForecastPanel';
 import { ContextPanel } from './components/ContextPanel';
 import { ImpactTrio } from './components/ImpactTrio';
 import { LiveData } from './components/LiveData';
+import { HistoryView } from './components/HistoryView';
 
 export function App() {
   const [state, setState] = useState<TamaState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [tab, setTab] = useState<'dashboard' | 'history'>('dashboard');
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<HostMessage>): void => {
@@ -28,19 +30,33 @@ export function App() {
 
   return (
     <div class="app">
-      <div class="app-main">
-        {/* Flat boxes, top → bottom by importance. No nested panels. */}
-        <ForecastPanel forecast={state.forecast} />
-        <SustainabilityGauge forecast={state.forecast} />
-        <ContextPanel
-          breakdown={state.forecast?.contextBreakdown ?? state.lastEvent?.contextBreakdown}
-          inputTokens={state.forecast?.contextInputTokens ?? state.lastEvent?.inputTokens}
-          sessionBreakdown={state.forecast?.sessionBreakdown}
-          sessionInputTokens={state.forecast?.sessionInputTokens}
-        />
-        <ImpactTrio metrics={state.metrics} forecast={state.forecast} />
-        <LiveData state={state} />
+      <div class="tabs">
+        <button class={`tab${tab === 'dashboard' ? ' active' : ''}`} onClick={() => setTab('dashboard')}>
+          Dashboard
+        </button>
+        <button class={`tab${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>
+          History
+        </button>
       </div>
+
+      {tab === 'dashboard' ? (
+        <div class="app-main">
+          <ForecastPanel forecast={state.forecast} />
+          <SustainabilityGauge forecast={state.forecast} />
+          <ContextPanel
+            breakdown={state.forecast?.contextBreakdown ?? state.lastEvent?.contextBreakdown}
+            inputTokens={state.forecast?.contextInputTokens ?? state.lastEvent?.inputTokens}
+            sessionBreakdown={state.forecast?.sessionBreakdown}
+            sessionInputTokens={state.forecast?.sessionInputTokens}
+          />
+          <ImpactTrio metrics={state.metrics} forecast={state.forecast} />
+          <LiveData state={state} />
+        </div>
+      ) : (
+        <div class="app-main">
+          <HistoryView forecast={state.forecast} />
+        </div>
+      )}
 
       <div class="actions">
         <button class="ghost" disabled={busy} onClick={() => post({ type: 'toggleCapture' })}>

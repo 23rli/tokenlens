@@ -78,6 +78,13 @@ export function parseChatSession(content: string): ParsedChatSession {
 
   const meta = state?.inputState?.selectedModel?.metadata;
   const modelConfig = state?.inputState?.modelConfiguration;
+  // The selected reasoning effort is often only present in a later patch that the
+  // snapshot reconstruction may not surface, so fall back to the LAST occurrence
+  // of "reasoningEffort":"<value>" anywhere in the file (most-recent selection).
+  const effortMatches = [...content.matchAll(/"reasoningEffort"\s*:\s*"([^"]+)"/g)];
+  const selectedEffort =
+    (typeof modelConfig?.reasoningEffort === 'string' ? modelConfig.reasoningEffort : undefined) ??
+    (effortMatches.length ? effortMatches[effortMatches.length - 1][1] : undefined);
   const model: ModelInfo | undefined = meta
     ? {
         id: meta.id ?? meta.family ?? 'unknown',
@@ -85,10 +92,7 @@ export function parseChatSession(content: string): ParsedChatSession {
         vendor: meta.vendor,
         maxInputTokens: meta.maxInputTokens,
         maxOutputTokens: meta.maxOutputTokens,
-        reasoningEffort:
-          typeof modelConfig?.reasoningEffort === 'string'
-            ? modelConfig.reasoningEffort
-            : undefined,
+        reasoningEffort: selectedEffort,
       }
     : undefined;
 

@@ -35,7 +35,7 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
       <header class="gauge-head">
         <span class="section-title">Context weight</span>
         <span class="gauge-band" style={{ color: f ? band.color : undefined }}>
-          {f ? band.label.toUpperCase() : '—'}
+          {f ? band.label : '—'}
         </span>
       </header>
 

@@ -1849,3 +1849,46 @@ button.ghost:hover {
 
 /* -- Context advisories: flatter, no rounded amber pills ------------------ */
 .context-advisory { border-radius: 0 !important; border: none !important; border-left: 2px solid #d29922 !important; background: rgba(210,153,34,0.08) !important; }
+
+/* -- No caps-lock: show labels in the case they are written --------------- */
+.section-title, .now-label, .next-kicker, .gauge-graphtitle, .context-barlabel,
+.impact .impact-label, .impact-hint, .gauge-band, .fc-real-k, .next-acc-note, .livedata-key {
+  text-transform: none !important; letter-spacing: 0.2px !important;
+}
+.section-title { font-weight: 600; }
+.gauge-band { font-weight: 700; }
+
+/* -- Percent labels on the where-tokens-go bars --------------------------- */
+.context .context-bar { height: 18px; border-radius: 3px; }
+.context-seg { display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.context-seg-pct { font-size: 9px; font-weight: 700; color: rgba(0, 0, 0, 0.7); }
+
+/* -- Top tabs (Dashboard / History) --------------------------------------- */
+.tabs { display: flex; gap: 2px; margin-bottom: 2px; }
+.tabs .tab {
+  flex: 1; padding: 6px 8px; font-size: 12px; cursor: pointer;
+  background: transparent; color: var(--vscode-descriptionForeground, #8b949e);
+  border: none; border-bottom: 2px solid transparent;
+}
+.tabs .tab.active {
+  color: var(--vscode-foreground); font-weight: 600;
+  border-bottom-color: var(--vscode-textLink-foreground, #539bf5);
+}
+
+/* -- History view --------------------------------------------------------- */
+.history { border-left-color: var(--vscode-descriptionForeground, #8b949e); }
+.history-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.history-count { font-size: 11px; color: var(--vscode-descriptionForeground, #8b949e); font-variant-numeric: tabular-nums; }
+.history-list { display: flex; flex-direction: column; }
+.history-row {
+  display: flex; align-items: baseline; gap: 8px; padding: 5px 0; font-size: 12px;
+  border-top: 1px solid var(--vscode-panel-border, #30363d); font-variant-numeric: tabular-nums;
+}
+.history-turn {
+  flex: 0 0 22px; text-align: right; color: var(--vscode-descriptionForeground, #8b949e); font-size: 11px;
+}
+.history-prompt { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--vscode-foreground); }
+.history-tokens { flex: 0 0 auto; font-weight: 700; }
+.history-delta { flex: 0 0 auto; font-size: 10px; color: var(--vscode-charts-green, #3fb950); }
+.history-delta.down { color: var(--vscode-textLink-foreground, #539bf5); }
+.history-empty { padding: 16px; text-align: center; }
