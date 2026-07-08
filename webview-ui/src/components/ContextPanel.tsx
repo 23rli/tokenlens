@@ -43,18 +43,26 @@ export function ContextPanel({
   const order = latest.slices.map((s) => s.label);
   const colorFor = (label: string): string => PALETTE[Math.max(0, order.indexOf(label)) % PALETTE.length];
 
-  const bar = (slices: ContextSlice[], total: number) => (
-    <div class="context-bar">
-      {slices.map((s, i) => (
-        <div
-          key={`${s.label}-${i}`}
-          class="context-seg"
-          style={{ width: `${(s.tokens / total) * 100}%`, background: colorFor(s.label) }}
-          title={`${s.label}: ${fmtNum(s.tokens)} tokens (${s.pct}%)`}
-        />
-      ))}
-    </div>
-  );
+  // Each bar fills 100% of its OWN segments, so proportions are correct and the
+  // bar never comes up short when the reported total includes uncategorised tokens.
+  const bar = (slices: ContextSlice[]) => {
+    const sum = slices.reduce((a, s) => a + s.tokens, 0) || 1;
+    return (
+      <div class="context-bar">
+        {slices.map((s, i) => {
+          const p = Math.round((s.tokens / sum) * 100);
+          return (
+            <div
+              key={`${s.label}-${i}`}
+              class="context-seg"
+              style={{ width: `${(s.tokens / sum) * 100}%`, background: colorFor(s.label) }}
+              title={`${s.label}: ${fmtNum(s.tokens)} tokens (${p}%)`}
+            />
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <section class="card context">
@@ -66,7 +74,7 @@ export function ContextPanel({
         <span class="context-barlabel">This prompt</span>
         <span class="context-barval">{fmtNum(latest.totalTokens)}</span>
       </div>
-      {bar(latest.slices, latest.totalTokens)}
+      {bar(latest.slices)}
 
       {session && (
         <>
@@ -74,7 +82,7 @@ export function ContextPanel({
             <span class="context-barlabel">Whole session</span>
             <span class="context-barval">{fmtNum(session.totalTokens)}</span>
           </div>
-          {bar(session.slices, session.totalTokens)}
+          {bar(session.slices)}
         </>
       )}
 
