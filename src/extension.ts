@@ -398,47 +398,29 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('tokentama.scorePrompt', () =>
-      scoreManualPrompt(scoreService),
-    ),
     vscode.commands.registerCommand('tokentama.openDashboard', () =>
       vscode.commands.executeCommand('tokentama.dashboard.focus'),
     ),
     vscode.commands.registerCommand('tokentama.toggleCapture', toggleCapture),
     vscode.commands.registerCommand('tokentama.resetEcosystem', async () => {
       const choice = await vscode.window.showWarningMessage(
-        'Reset Tokentama? This clears your pet health, scores, and session history for this workspace. Captured chats will be re-tracked as new prompts arrive.',
+        'Reset Token Lens? This clears the tracked history for this workspace. Chats will be re-tracked as new turns arrive.',
         { modal: true },
         'Reset',
       );
       if (choice !== 'Reset') return;
       store.reset();
-      void vscode.window.showInformationMessage('Tokentama ecosystem reset.');
     }),
-    vscode.commands.registerCommand('tokentama.rescan', () =>
-      rescanCopilot(scoreService, log, workspaceHash),
-    ),
     vscode.commands.registerCommand('tokentama.diagnostics', () =>
       showCaptureDiagnostics(workspaceHash, output),
     ),
     vscode.commands.registerCommand('tokentama.captureSelfTest', () =>
       captureSelfTest(workspaceHash, () => watcher, store, output),
     ),
-    vscode.commands.registerCommand('tokentama.runDemo', () => scoreService.runDemo()),
-    vscode.commands.registerCommand('tokentama.setLlmApiKey', () => setLlmApiKey(context)),
-    vscode.commands.registerCommand('tokentama.exportPilotData', () =>
-      exportPilotData(store, telemetry, log),
-    ),
-    vscode.commands.registerCommand('tokentama.ingestHistory', () =>
-      ingestHistory(scoreService, corpus, log, workspaceHash),
-    ),
-    vscode.commands.registerCommand('tokentama.exportCorpus', () => exportCorpus(corpus, log)),
     vscode.commands.registerCommand('tokentama.compactSession', () =>
       compactSession(workspaceHash, log),
     ),
   );
-
-  registerChatParticipant(context, scoreService, store, log);
 
   if (store.captureEnabled) startWatcher();
 

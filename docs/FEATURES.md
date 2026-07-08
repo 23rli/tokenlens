@@ -1,8 +1,8 @@
-# Tokentama — Feature Reference
+# Token Lens — Feature Reference
 
 _Real-time **cost visibility** and **precognition** (forecasting) for GitHub Copilot token usage. Not a savings tool — it tells you what you're spending and what your next prompt will cost, before you send it._
 
-Everything is **read-only** and **local**. Tokentama reads VS Code's on-disk Copilot chat logs; it never sends your prompts anywhere.
+Everything is **read-only** and **local**. Token Lens reads VS Code's on-disk Copilot chat logs; it never sends your prompts anywhere.
 
 ---
 

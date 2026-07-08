@@ -47,10 +47,11 @@ export function ImpactTrio({ metrics, forecast }: { metrics: SuccessMetrics; for
   return (
     <section class="card impact">
       <header class="impact-head">
-        <span class="section-title">Total cost</span>
+        <span class="section-title" title="Everything metered across all chats in this workspace.">
+          Total cost
+        </span>
         <span class="impact-hint">▲ last turn</span>
       </header>
-      <p class="card-scope">Everything metered across all chats in this workspace.</p>
       <div class="impact-trio">
         {tiles.map((t) => (
           <div class="impact-tile" key={t.key}>

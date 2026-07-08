@@ -20,8 +20,7 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
         </div>
       </section>
 
-      <section class="card next">
-        <p class="card-scope">What your next prompt will cost, predicted from recent turns.</p>
+      <section class="card next" title="What your next prompt will cost, predicted from recent turns.">
         <div class="next-cols">
           <div class="next-col">
             <span class="next-kicker">Last turn</span>

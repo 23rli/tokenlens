@@ -77,9 +77,13 @@ export function ContextPanel({
   return (
     <section class="card context">
       <div class="context-head">
-        <span class="section-title">Where tokens go</span>
+        <span
+          class="section-title"
+          title="Input tokens by scope: this prompt → this chat → all chats in this workspace."
+        >
+          Where tokens go
+        </span>
       </div>
-      <p class="card-scope">Input tokens by scope: this prompt → this chat → all chats in this workspace.</p>
 
       <div class="context-barrow">
         <span class="context-barlabel">This prompt</span>

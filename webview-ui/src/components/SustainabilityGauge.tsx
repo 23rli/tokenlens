@@ -46,12 +46,16 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
   return (
     <section class={`card gauge${blown ? ' gauge-blown' : ''}`}>
       <header class="gauge-head">
-        <span class="section-title">Context weight</span>
+        <span
+          class="section-title"
+          title="Context loaded in this chat right now — resets when Copilot summarizes."
+        >
+          Context weight
+        </span>
         <span class="gauge-band" style={{ color: f ? band.color : undefined }}>
           {f ? band.label : '—'}
         </span>
       </header>
-      <p class="card-scope">Context loaded in this chat right now — resets when Copilot summarizes.</p>
 
       <div class="gauge-loadrow">
         <span class={`gauge-load${f ? '' : ' muted'}`}>{f ? fmtNum(f.contextTokens) : '—'}</span>
@@ -113,7 +117,7 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
           <div class="gauge-sparkaxis">
             <span>turn 1</span>
             <span title="A reset is when Copilot auto-summarizes the chat near the limit, collapsing the carried context.">
-              {resets > 0 ? `${resets} reset${resets > 1 ? 's' : ''} ⓘ` : ''}
+              {resets > 0 ? `${resets} reset${resets > 1 ? 's' : ''}` : ''}
             </span>
             <span>now (turn {series.length})</span>
           </div>

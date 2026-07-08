@@ -1,31 +1,33 @@
 import * as vscode from 'vscode';
-import type { TamaState, PetWorldState } from '../webview/contract';
+import type { TamaState } from '../webview/contract';
 
-const WORLD_EMOJI: Record<PetWorldState, string> = {
-  thriving: '🌳',
-  healthy: '🌿',
-  concerned: '🍂',
-  critical: '🥀',
-  collapse: '🔥',
-  dead: '💀',
-};
-
-/** Status-bar indicator showing the live efficiency score + ecosystem mood. */
+/**
+ * Status-bar entry point to the Token Lens dashboard. Shows the live context load
+ * (percent of the model's limit) when a forecast is available, else just the brand.
+ */
 export class StatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
 
   constructor() {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    this.item.name = 'Token Lens';
     this.item.command = 'tokentama.openDashboard';
+    this.item.text = '$(eye) Token Lens';
+    this.item.tooltip = 'Open Token Lens';
     this.item.show();
   }
 
   update(state: TamaState): void {
-    const emoji = WORLD_EMOJI[state.world] ?? '🌿';
-    this.item.text = `$(shield) ${emoji} ${Math.round(state.overallScore)}`;
-    this.item.tooltip = `Tokentama — ${state.world} · waste ${Math.round(
-      state.wasteScore,
-    )} · ${state.metrics.promptsScored} scored`;
+    const f = state.forecast;
+    if (f && f.loadFraction != null) {
+      const pct = Math.round(f.loadFraction * 100);
+      const next = Math.round(f.predictedInputTokens).toLocaleString();
+      this.item.text = `$(eye) ${pct}%`;
+      this.item.tooltip = `Token Lens — context ${pct}% of limit · next turn ≈ ${next} tokens`;
+    } else {
+      this.item.text = '$(eye) Token Lens';
+      this.item.tooltip = 'Open Token Lens';
+    }
   }
 
   dispose(): void {
