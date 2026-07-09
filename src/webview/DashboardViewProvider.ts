@@ -53,9 +53,6 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider {
       case 'toggleCapture':
         this.handlers.toggleCapture();
         break;
-      case 'compactSession':
-        void vscode.commands.executeCommand('tokentama.compactSession');
-        break;
     }
   }
 

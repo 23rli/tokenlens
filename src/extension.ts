@@ -14,7 +14,7 @@ import type { PromptEvent, ContextSlice } from '@tokentama/shared-types';
 import { estimateCredits } from '@tokentama/scoring-engine';
 
 export function activate(context: vscode.ExtensionContext): void {
-  const store = new TamaStore(context);
+  const store = new TamaStore();
 
   const output = vscode.window.createOutputChannel('Tokentama');
   context.subscriptions.push(output);
@@ -188,6 +188,7 @@ export function activate(context: vscode.ExtensionContext): void {
           chatCostUsd,
           allTurns,
         }),
+        modelEvent.model,
       );
     } catch {
       /* best-effort — the panel skeletons remain until data is available */

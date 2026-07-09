@@ -2,91 +2,11 @@
  * Shared message + state contract between the extension host and the webview.
  * Types only — safe to import from both the Node host and the browser webview.
  */
-import type { PetWorldState, Subscores, WasteComponent, ModelInfo, ContextSlice } from '@tokentama/shared-types';
-import type { OutcomeReport } from '../analysis/outcomes';
+import type { ModelInfo, ContextSlice } from '@tokentama/shared-types';
 
-export type { PetWorldState, Subscores, WasteComponent, ModelInfo, ContextSlice } from '@tokentama/shared-types';
+export type { ModelInfo, ContextSlice } from '@tokentama/shared-types';
 
-export type { OutcomeReport } from '../analysis/outcomes';
-
-/** A single scored prompt, flattened for display in the webview. */
-export interface ScoredEventView {
-  promptPreview: string;
-  overallScore: number;
-  wasteScore: number;
-  delta: number;
-  inputTokens: number;
-  outputTokens: number;
-  estimatedCostUsd: number;
-  /** Estimated Copilot credits (AICs) for this turn. */
-  estimatedCredits?: number;
-  /** Real Copilot credits for this turn, when read from disk. */
-  copilotCredits?: number;
-  /** True when token counts are real (from chatSessions), not estimated. */
-  tokensReal?: boolean;
-  /** Where this turn's input tokens went (system / tools / messages…). */
-  contextBreakdown?: ContextSlice[];
-  wasteBreakdown: WasteComponent[];
-  reasons: string[];
-  improvements: string[];
-  timestamp: string;
-  source: 'manual' | 'copilot';
-  /** Per-prompt efficiency (0..100): waste scaled by cost/carbon intensity. */
-  efficiency?: number;
-  /** Estimated task difficulty, for model/effort right-sizing. */
-  difficulty?: 'trivial' | 'moderate' | 'complex';
-}
-
-/** A coaching tip shown to the user. */
-export interface TipView {
-  message: string;
-  rewrittenPrompt?: string;
-  category?: string;
-  /** Estimated % fewer tokens the rewrite would use. */
-  estimatedTokenReductionPct?: number;
-  /** Estimated % lower latency the rewrite would yield. */
-  estimatedLatencyReductionPct?: number;
-  /** Estimated absolute tokens saved by the rewrite for this prompt. */
-  estimatedTokensSaved?: number;
-}
-
-/** Live score for a draft typed in the compose box (offline, no state change). */
-export interface ComposeResult {
-  text: string;
-  overallScore: number;
-  wasteScore: number;
-  tip?: string;
-  rewrittenPrompt?: string;
-  estimatedTokenReductionPct?: number;
-  /** Estimated number of tokens the leaner rewrite saves. */
-  estimatedTokensSaved?: number;
-  inputTokens: number;
-  /** Predicted likelihood this prompt needs a retry (the costliest miss). */
-  retryRisk?: 'low' | 'medium' | 'high';
-  retryReasons?: string[];
-  /** Offline corpus hint when the prompt names no target the user usually works in. */
-  contextGapHint?: string;
-}
-
-/** Result of an on-demand auto-rewrite of a compose-box draft. */
-export interface AutoRewriteView {
-  text: string;
-  rewrittenPrompt?: string;
-  estimatedTokenReductionPct?: number;
-  /** Estimated number of tokens the rewrite saves vs. the original. */
-  estimatedTokensSaved?: number;
-  source: 'offline' | 'llm' | 'none';
-  examplesUsed: number;
-}
-
-/** A point on the session score trend line. */
-export interface ScorePoint {
-  t: number;
-  overallScore: number;
-  wasteScore: number;
-}
-
-/** The six headline success metrics (design doc success criteria). */
+/** The headline cost metrics (zero-state fallback for the cost tiles). */
 export interface SuccessMetrics {
   /** % reduction in estimated tokens across the session (baseline → latest). */
   tokenReductionPct: number;
@@ -208,27 +128,13 @@ export interface ForecastView {
   allTurns?: { prompt: string; tokens: number; metered: boolean }[];
 }
 
-/** Full snapshot of pet state pushed to the webview. */
+/** Snapshot pushed to the webview + status bar. */
 export interface TamaState {
-  world: PetWorldState;
-  /** Current session health (0..100) that drives the pet world. */
-  health: number;
-  /** True while the shown score is a preliminary preview (tokens not finalized). */
-  preliminary?: boolean;
-  overallScore: number;
-  wasteScore: number;
-  subscores: Subscores;
-  lastEvent?: ScoredEventView;
-  tip?: TipView;
-  history: ScorePoint[];
+  /** Zero-state cost fallback; the forecast's whole-chat totals are preferred. */
   metrics: SuccessMetrics;
-  /** The session's selected model + its pricing/capabilities, when known. */
+  /** The active session's model + pricing/capabilities, when known. */
   model?: ModelInfo;
   captureEnabled: boolean;
-  /** Aggregate coaching-outcome signal (retry reduction from adoption). */
-  outcomes?: OutcomeReport;
-  /** Most recent finalized scored events (newest first) for the recent strip. */
-  recentEvents?: ScoredEventView[];
   /** Live next-turn cost forecast + accuracy (precognition). */
   forecast?: ForecastView;
 }
@@ -236,20 +142,9 @@ export interface TamaState {
 /** Messages sent host → webview. */
 export type HostMessage =
   | { type: 'state'; state: TamaState }
-  | { type: 'busy'; busy: boolean }
-  | { type: 'composeResult'; result: ComposeResult }
-  | { type: 'autoRewriteResult'; result: AutoRewriteView };
+  | { type: 'busy'; busy: boolean };
 
 /** Messages sent webview → host. */
 export type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'scorePrompt' }
-  | { type: 'reset' }
-  | { type: 'toggleCapture' }
-  | { type: 'runDemo' }
-  | { type: 'applyTip'; rewrittenPrompt: string }
-  | { type: 'copyTip'; text: string }
-  | { type: 'composeInput'; text: string }
-  | { type: 'autoRewrite'; text: string }
-  | { type: 'copyToCopilot'; text: string; adopted: boolean }
-  | { type: 'compactSession' };
+  | { type: 'toggleCapture' };

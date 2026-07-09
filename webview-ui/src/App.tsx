@@ -55,8 +55,8 @@ export function App() {
           <ForecastPanel forecast={state.forecast} />
           <SustainabilityGauge forecast={state.forecast} />
           <ContextPanel
-            breakdown={state.forecast?.contextBreakdown ?? state.lastEvent?.contextBreakdown}
-            inputTokens={state.forecast?.contextInputTokens ?? state.lastEvent?.inputTokens}
+            breakdown={state.forecast?.contextBreakdown}
+            inputTokens={state.forecast?.contextInputTokens}
             sessionBreakdown={state.forecast?.sessionBreakdown}
             sessionInputTokens={state.forecast?.sessionInputTokens}
             chatBreakdown={state.forecast?.chatBreakdown}

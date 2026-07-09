@@ -107,10 +107,9 @@ _Legacy/experimental settings still present: `coaching.*`, `sustainability.*`, `
 ## 7. Removed / deprecated
 
 Token Lens began as a prompt-efficiency **scoring + tamagotchi** tool, then pivoted to
-pure cost visibility + forecasting. Removed from the codebase in the cleanup: the
-prompt **scoring service**, the **rewriter** (auto-rewrite), the deprecated commands
-(score / rescan / demo / ingest / export), the **`@tokentama` chat participant**, and
-the pet/coaching/sustainability settings. Still present but vestigial (behind the
-cost/forecast UI): the pet **health/world** fields on the state contract and the
-**coaching** helper (kept only because the compaction summary reuses one text helper).
-These will be trimmed in a later contract refactor.
+pure cost visibility + forecasting. As of the v0.5.0 cleanup, the legacy subsystems are
+**fully removed** from the codebase: the prompt scoring service, the rewriter, the
+training corpus, the LLM/heuristic coach (except one text helper reused by the compact
+command), telemetry, the pet health/world model, and ~11 unused webview components. The
+state contract (`TamaState`) is now just `{ metrics, model, captureEnabled, forecast }`,
+and the dashboard is driven entirely by the on-disk forecast.
