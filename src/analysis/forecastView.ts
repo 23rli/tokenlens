@@ -5,6 +5,7 @@ import type { PromptEvent, ContextSlice } from '@tokentama/shared-types';
 import { estimateCredits } from '@tokentama/scoring-engine';
 
 export interface ForecastViewExtras {
+  forecastTarget?: ForecastView['forecastTarget'];
   sessionShortId?: string;
   sessionTitle?: string;
   lastPromptPreview?: string;
@@ -12,7 +13,10 @@ export interface ForecastViewExtras {
   contextSeries: number[];
   turnPrompts?: string[];
   realLastInputTokens?: number;
+  realLastTotalTokens?: number;
   realLastCredits?: number;
+  realLastCostUsd?: number;
+  realLastIsToday?: boolean;
   contextBreakdown?: ContextSlice[];
   contextInputTokens?: number;
   sessionBreakdown?: ContextSlice[];
@@ -20,10 +24,19 @@ export interface ForecastViewExtras {
   chatBreakdown?: ContextSlice[];
   chatInputTokens?: number;
   chatSessionCount?: number;
+  aggregateScope?: ForecastView['aggregateScope'];
   chatTotalTokens?: number;
   chatCredits?: number;
   chatCreditsEstimated?: boolean;
   chatCostUsd?: number;
+  sessionTotalTokens?: number;
+  sessionCredits?: number;
+  sessionCreditsEstimated?: boolean;
+  sessionCostUsd?: number;
+  todayTotalTokens?: number;
+  todayCredits?: number;
+  todayCreditsEstimated?: boolean;
+  todayCostUsd?: number;
   allTurns?: { prompt: string; tokens: number; metered: boolean }[];
 }
 
@@ -62,6 +75,7 @@ export function buildForecastView(
             : 'light';
 
   return {
+    forecastTarget: extras.forecastTarget ?? 'next',
     predictedInputTokens: f.predictedInputTokens,
     intervalLow: f.interval.low,
     intervalHigh: f.interval.high,
@@ -70,7 +84,10 @@ export function buildForecastView(
     resetRisk: f.resetRisk,
     hungriest: f.hungriest,
     realLastInputTokens: extras.realLastInputTokens,
+    realLastTotalTokens: extras.realLastTotalTokens,
     realLastCredits: extras.realLastCredits,
+    realLastCostUsd: extras.realLastCostUsd,
+    realLastIsToday: extras.realLastIsToday,
     accuracyScore: acc.score,
     accuracySamples: acc.samples,
     intervalCoverage: acc.intervalCoverage,
@@ -91,10 +108,19 @@ export function buildForecastView(
     chatBreakdown: extras.chatBreakdown,
     chatInputTokens: extras.chatInputTokens,
     chatSessionCount: extras.chatSessionCount,
+    aggregateScope: extras.aggregateScope,
     chatTotalTokens: extras.chatTotalTokens,
     chatCredits: extras.chatCredits,
     chatCreditsEstimated: extras.chatCreditsEstimated,
     chatCostUsd: extras.chatCostUsd,
+    sessionTotalTokens: extras.sessionTotalTokens,
+    sessionCredits: extras.sessionCredits,
+    sessionCreditsEstimated: extras.sessionCreditsEstimated,
+    sessionCostUsd: extras.sessionCostUsd,
+    todayTotalTokens: extras.todayTotalTokens,
+    todayCredits: extras.todayCredits,
+    todayCreditsEstimated: extras.todayCreditsEstimated,
+    todayCostUsd: extras.todayCostUsd,
     allTurns: extras.allTurns,
   };
 }

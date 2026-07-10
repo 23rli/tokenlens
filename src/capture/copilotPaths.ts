@@ -17,6 +17,13 @@ export function getWorkspaceStorageRoot(override?: string): string {
   if (process.env.ECO_COPILOT_WORKSPACE_STORAGE) {
     return process.env.ECO_COPILOT_WORKSPACE_STORAGE;
   }
+  if (process.platform === 'darwin') {
+    return join(homedir(), 'Library', 'Application Support', 'Code', 'User', 'workspaceStorage');
+  }
+  if (process.platform !== 'win32') {
+    const configHome = process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config');
+    return join(configHome, 'Code', 'User', 'workspaceStorage');
+  }
   const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming');
   return join(appData, 'Code', 'User', 'workspaceStorage');
 }

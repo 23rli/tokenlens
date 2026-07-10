@@ -1,5 +1,5 @@
 // Hermetic smoke test: mock the `vscode` API, activate the bundled extension,
-// invoke the score command, and confirm the scoring pipeline runs end-to-end.
+// verify its public commands/status entry point, then dispose every resource.
 import Module from 'node:module';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -10,7 +10,7 @@ let statusItem;
 
 const makeConfig = (section) => ({
   get: (key, def) => {
-    if (section === 'ecoprompt.passiveCapture' && key === 'enabled') return false;
+    if (section === 'tokenlens.passiveCapture' && key === 'enabled') return false;
     return def;
   },
   update: async () => {},
@@ -59,9 +59,10 @@ const vscodeMock = {
       return statusItem;
     },
     registerWebviewViewProvider: () => ({ dispose() {} }),
-    showInputBox: async () =>
-      'Could you please, if it is not too much trouble, kindly and thoroughly help me to maybe possibly write some code that does the thing, you know, like the usual stuff, and also please re-read all the context I pasted again and again.',
     showInformationMessage: async () => undefined,
+    showWarningMessage: async () => undefined,
+    showErrorMessage: async () => undefined,
+    onDidChangeWindowState: () => ({ dispose() {} }),
   },
   commands: {
     registerCommand: (id, cb) => {
@@ -75,10 +76,11 @@ const vscodeMock = {
   },
   workspace: {
     getConfiguration: makeConfig,
+    onDidChangeConfiguration: () => ({ dispose() {} }),
     createFileSystemWatcher: () => ({
-      onDidCreate() {},
-      onDidChange() {},
-      onDidDelete() {},
+      onDidCreate: () => ({ dispose() {} }),
+      onDidChange: () => ({ dispose() {} }),
+      onDidDelete: () => ({ dispose() {} }),
       dispose() {},
     }),
   },
@@ -116,14 +118,36 @@ ext.activate(context);
 console.log('activate() ok — commands:', [...commands.keys()].join(', '));
 console.log('initial status:', statusItem.text);
 
-await commands.get('ecoprompt.scorePrompt')();
-console.log('after scoring status:', statusItem.text);
+const expectedCommands = [
+  'tokenlens.openDashboard',
+  'tokenlens.toggleCapture',
+  'tokenlens.pinChat',
+  'tokenlens.unpinChat',
+  'tokenlens.diagnostics',
+  'tokenlens.captureSelfTest',
+];
+for (const id of expectedCommands) {
+  if (!commands.has(id)) {
+    console.error(`SMOKE FAIL: command not registered: ${id}`);
+    process.exitCode = 1;
+  }
+}
+if (statusItem.text !== '$(debug-pause) Token Lens') {
+  console.error(`SMOKE FAIL: unexpected initial status: ${statusItem.text}`);
+  process.exitCode = 1;
+}
+
+await commands.get('tokenlens.openDashboard')();
+
+// ExtensionContext owns lifecycle cleanup in VS Code; mimic that here so leaked
+// intervals/listeners make the smoke test fail by hanging instead of being hidden.
+for (const disposable of context.subscriptions.slice().reverse()) {
+  disposable?.dispose?.();
+}
 
 Module._load = origLoad;
 
-const score = Number((statusItem.text.match(/(\d+)\s*$/) || [])[1]);
-if (!Number.isFinite(score)) {
-  console.error('SMOKE FAIL: no numeric score in status bar');
-  process.exit(1);
+if (process.exitCode) {
+  process.exit(process.exitCode);
 }
-console.log(`SMOKE PASS: scored a prompt → ${score}/100`);
+console.log('SMOKE PASS: activation, contributions, command routing, and disposal succeeded.');

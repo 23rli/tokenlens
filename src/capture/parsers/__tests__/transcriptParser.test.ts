@@ -53,6 +53,7 @@ describe('parseTranscript', () => {
 
     const parsed = parseTranscript(content);
     expect(parsed.sessionId).toBe('sess-1');
+    expect(parsed.startTime).toBe('2026-06-22T01:00:00.000Z');
     expect(parsed.turns).toHaveLength(1);
     const turn = parsed.turns[0]!;
     expect(turn.promptText).toBe('Refactor the parser');

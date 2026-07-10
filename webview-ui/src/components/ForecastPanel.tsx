@@ -13,11 +13,12 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
   const turns = f?.allTurns ?? [];
   const liveTurn = turns.length || f?.turnCount || 0;
   const pending = turns.filter((t) => !t.metered).length;
+  const estimatingPending = f?.forecastTarget === 'pending';
 
   return (
     <>
       <section class="card now">
-        <span class="now-label">Chat</span>
+        <span class="now-label" role="heading" aria-level={2}>Chat</span>
         <div class="now-row">
           <span class="now-name">{name}</span>
           {f && liveTurn > 0 && (
@@ -29,7 +30,10 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
         </div>
       </section>
 
-      <section class="card next">
+      <section class="card next" aria-labelledby="forecast-heading">
+        <h2 id="forecast-heading" class="sr-only">
+          {estimatingPending ? 'Current turn estimate' : 'Next-turn forecast'}
+        </h2>
         <div class="next-cols">
           <div class="next-col">
             <Tip text="The real input tokens your most recent METERED turn cost. A just-sent turn stays 'pending' until Copilot writes its real tokens.">
@@ -41,8 +45,8 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
           </div>
           <div class="next-arrow">→</div>
           <div class="next-col">
-            <Tip text="What your next prompt will cost, predicted from your recent turns.">
-              <span class="next-kicker">Next turn (est.)</span>
+            <Tip text={estimatingPending ? "What the in-flight prompt is likely to cost once Copilot finishes metering it." : "What your next prompt will cost, predicted from your recent turns. It's driven by re-sent history and tool calls, not just your message length — fewer tool round-trips and a shorter chat cost less."}>
+              <span class="next-kicker">{estimatingPending ? 'Current turn (est.)' : 'Next turn (est.)'}</span>
             </Tip>
             <span class={`next-number next-pred${f ? '' : ' muted'}`}>
               {f ? fmtNum(f.predictedInputTokens) : '—'}
@@ -64,7 +68,7 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
 
         {pending > 0 && (
           <div class="next-pending">
-            {pending} turn{pending > 1 ? 's' : ''} in flight — the estimate updates once Copilot meters {pending > 1 ? 'them' : 'it'}.
+            {pending} turn{pending > 1 ? 's' : ''} in flight — showing the current turn estimate until Copilot meters {pending > 1 ? 'them' : 'it'}.
           </div>
         )}
 

@@ -1,5 +1,6 @@
 import type { TamaState } from '../../../src/webview/contract';
 import { fmtNum } from '../format';
+import { Tip } from './Tip';
 
 /**
  * The model/agent context: which model, reasoning effort, and context window are
@@ -23,7 +24,9 @@ export function LiveData({ state }: { state: TamaState }) {
   return (
     <section class="card livedata">
       <div class="livedata-head">
-        <span class="section-title">Live Copilot data</span>
+        <Tip text="The model and reasoning effort in use. Premium models typically have higher rates, and more reasoning can increase total turn cost — match the model to the task.">
+          <span class="section-title" role="heading" aria-level={2}>Live Copilot data</span>
+        </Tip>
       </div>
 
       <div class="livedata-row">

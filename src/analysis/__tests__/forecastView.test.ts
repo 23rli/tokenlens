@@ -85,14 +85,24 @@ describe('buildForecastView', () => {
     const v = buildForecastView(mkForecast(), acc, mkEvent(model), {
       ...extras,
       realLastInputTokens: 121_000,
+      realLastTotalTokens: 125_000,
       realLastCredits: 132,
+      realLastCostUsd: 0.42,
+      realLastIsToday: true,
+      forecastTarget: 'pending',
+      aggregateScope: 'allWindows',
       chatTotalTokens: 6_100_000,
       chatCredits: 5500,
       chatCostUsd: 3.54,
       allTurns: [{ prompt: 'hi', tokens: 100, metered: true }],
     });
     expect(v.realLastInputTokens).toBe(121_000);
+    expect(v.realLastTotalTokens).toBe(125_000);
     expect(v.realLastCredits).toBe(132);
+    expect(v.realLastCostUsd).toBe(0.42);
+    expect(v.realLastIsToday).toBe(true);
+    expect(v.forecastTarget).toBe('pending');
+    expect(v.aggregateScope).toBe('allWindows');
     expect(v.accuracyScore).toBe(90);
     expect(v.accuracySamples).toBe(5);
     expect(v.intervalCoverage).toBe(0.9);

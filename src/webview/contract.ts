@@ -25,6 +25,8 @@ export interface SuccessMetrics {
  * UI must label which is which.
  */
 export interface ForecastView {
+  /** Whether the estimate targets an in-flight prompt or the next unsent turn. */
+  forecastTarget: 'pending' | 'next';
   /** PREDICTED input tokens for the next turn. */
   predictedInputTokens: number;
   /** Calibrated interval [low, high] around the prediction. */
@@ -41,8 +43,14 @@ export interface ForecastView {
 
   /** REAL input tokens metered on the last completed turn. */
   realLastInputTokens?: number;
+  /** REAL input + output tokens on the last completed turn. */
+  realLastTotalTokens?: number;
   /** REAL credits metered on the last completed turn. */
   realLastCredits?: number;
+  /** Derived USD cost for the last completed turn under the configured rate. */
+  realLastCostUsd?: number;
+  /** Whether the last completed turn belongs to the current local calendar day. */
+  realLastIsToday?: boolean;
 
   /** Self-measured accuracy score (0..100 = 100 − median % error). */
   accuracyScore: number;
@@ -86,6 +94,8 @@ export interface ForecastView {
   chatInputTokens?: number;
   /** Number of distinct conversations aggregated into the whole-chat totals. */
   chatSessionCount?: number;
+  /** What the broadest totals represent in the current capture configuration. */
+  aggregateScope?: 'workspace' | 'allWindows' | 'emptyWindow';
   /** Total tokens (input + output) across every conversation in this workspace. */
   chatTotalTokens?: number;
   /** Total Copilot credits (AICs) across every conversation in this workspace. */
@@ -94,6 +104,22 @@ export interface ForecastView {
   chatCreditsEstimated?: boolean;
   /** Derived $ cost for the whole-chat token total (blended $/1M-token rate). */
   chatCostUsd?: number;
+  /** Total tokens (input + output) for the ACTIVE chat only. */
+  sessionTotalTokens?: number;
+  /** Total Copilot credits (AICs) for the active chat only. */
+  sessionCredits?: number;
+  /** True when the active-chat credit total is estimated rather than metered. */
+  sessionCreditsEstimated?: boolean;
+  /** Derived $ cost for the active chat's token total. */
+  sessionCostUsd?: number;
+  /** Total tokens (input + output) across turns dated today (all chats in scope). */
+  todayTotalTokens?: number;
+  /** Total Copilot credits (AICs) across today's turns. */
+  todayCredits?: number;
+  /** True when today's credit total is estimated rather than metered. */
+  todayCreditsEstimated?: boolean;
+  /** Derived $ cost for today's token total. */
+  todayCostUsd?: number;
   /** Every user turn (metered or still pending), oldest→newest, for the History list. */
   allTurns?: { prompt: string; tokens: number; metered: boolean }[];
 }

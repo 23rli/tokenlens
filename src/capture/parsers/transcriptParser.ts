@@ -17,6 +17,7 @@ interface Envelope {
 export function parseTranscript(content: string): ParsedTranscript {
   const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
   let sessionId = '';
+  let startTime: string | undefined;
   const turns: ParsedTurn[] = [];
   const toolStart = new Map<string, { name: string; ts?: string }>();
   let current: ParsedTurn | undefined;
@@ -40,6 +41,7 @@ export function parseTranscript(content: string): ParsedTranscript {
     switch (ev.type) {
       case 'session.start':
         sessionId = typeof d.sessionId === 'string' ? d.sessionId : sessionId;
+        startTime ??= ev.timestamp;
         break;
       case 'user.message': {
         // A new user prompt always starts a new turn.
@@ -101,5 +103,5 @@ export function parseTranscript(content: string): ParsedTranscript {
     }
   }
 
-  return { sessionId, turns };
+  return { sessionId, startTime, turns };
 }

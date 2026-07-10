@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useId, useState } from 'preact/hooks';
 import type { ComponentChildren } from 'preact';
 
 /**
@@ -8,10 +8,18 @@ import type { ComponentChildren } from 'preact';
  */
 export function Tip({ text, children }: { text: string; children: ComponentChildren }) {
   const [pos, setPos] = useState<{ x: number; y: number } | null>(null);
+  const tooltipId = useId();
 
   const show = (el: HTMLElement): void => {
     const r = el.getBoundingClientRect();
-    setPos({ x: r.left, y: r.bottom + 6 });
+    const estimatedWidth = Math.min(240, Math.max(0, window.innerWidth - 16));
+    const x = Math.max(8, Math.min(r.left, window.innerWidth - estimatedWidth - 8));
+    const estimatedHeight = 96;
+    const y =
+      r.bottom + 6 + estimatedHeight <= window.innerHeight
+        ? r.bottom + 6
+        : Math.max(8, r.top - estimatedHeight - 6);
+    setPos({ x, y });
   };
 
   return (
@@ -21,11 +29,20 @@ export function Tip({ text, children }: { text: string; children: ComponentChild
       onMouseLeave={() => setPos(null)}
       onFocusIn={(e) => show(e.currentTarget as HTMLElement)}
       onFocusOut={() => setPos(null)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') setPos(null);
+      }}
       tabIndex={0}
+      aria-describedby={pos ? tooltipId : undefined}
     >
       {children}
       {pos && (
-        <span class="tip-bubble" role="tooltip" style={{ left: `${pos.x}px`, top: `${pos.y}px` }}>
+        <span
+          id={tooltipId}
+          class="tip-bubble"
+          role="tooltip"
+          style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
+        >
           {text}
         </span>
       )}

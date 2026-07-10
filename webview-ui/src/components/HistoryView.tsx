@@ -20,14 +20,14 @@ export function HistoryView({ forecast }: { forecast?: ForecastView }) {
         prompt: t.prompt || '—',
         tokens: t.tokens,
         metered: t.metered,
-        delta: i > 0 ? t.tokens - all[i - 1].tokens : t.tokens,
+        delta: i > 0 ? t.tokens - all[i - 1].tokens : undefined,
       }))
     : series.map((v, i) => ({
         turn: i + 1,
         prompt: prompts[i] || '—',
         tokens: v,
         metered: true,
-        delta: i > 0 ? v - series[i - 1] : v,
+        delta: i > 0 ? v - series[i - 1] : undefined,
       }));
 
   if (rows.length === 0) {
@@ -37,23 +37,25 @@ export function HistoryView({ forecast }: { forecast?: ForecastView }) {
   return (
     <section class="card history">
       <div class="history-head">
-        <span class="section-title">Turn history</span>
+        <span class="section-title" role="heading" aria-level={2}>Turn history</span>
         <span class="history-count">{rows.length} turns</span>
       </div>
-      <div class="history-list">
+      <div class="history-list" role="list" aria-label="Copilot turn history">
         {rows
           .slice()
           .reverse()
           .map((r) => (
-            <div class="history-row" key={r.turn}>
+            <div class="history-row" key={r.turn} role="listitem">
               <span class="history-turn">{r.turn}</span>
               <span class="history-prompt" title={r.prompt}>{r.prompt}</span>
               {r.metered ? (
                 <>
                   <span class="history-tokens">{fmtNum(r.tokens)}</span>
-                  <span class={`history-delta${r.delta < 0 ? ' down' : ''}`}>
-                    {r.delta < 0 ? `▼ ${fmtNum(-r.delta)}` : `▲ ${fmtNum(r.delta)}`}
-                  </span>
+                  {r.delta != null && (
+                    <span class={`history-delta${r.delta < 0 ? ' down' : ''}`}>
+                      {r.delta < 0 ? `▼ ${fmtNum(-r.delta)}` : `▲ ${fmtNum(r.delta)}`}
+                    </span>
+                  )}
                 </>
               ) : (
                 <>

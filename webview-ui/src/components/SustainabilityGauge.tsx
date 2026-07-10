@@ -47,8 +47,8 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
   return (
     <section class={`card gauge${blown ? ' gauge-blown' : ''}`}>
       <header class="gauge-head">
-        <Tip text="Context loaded in this chat right now — resets when Copilot summarizes.">
-          <span class="section-title">Context weight</span>
+        <Tip text="Context loaded in this chat right now. Every turn re-sends this whole context, so each turn costs more as it grows — start a fresh chat for a new task to reset it (Copilot also auto-summarizes near the limit).">
+          <span class="section-title" role="heading" aria-level={2}>Context weight</span>
         </Tip>
         <span class="gauge-band" style={{ color: f ? band.color : undefined }}>
           {f ? band.label : '—'}
@@ -60,7 +60,15 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
         <span class="gauge-load-unit">tokens carried</span>
       </div>
 
-      <div class="gauge-track">
+      <div
+        class="gauge-track"
+        role="progressbar"
+        aria-label="Context window load"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.min(100, pct ?? Math.round(fill * 100))}
+        aria-valuetext={f?.contextLimit ? `${pct}% of ${fmtNum(f.contextLimit)} tokens` : 'Context limit unknown'}
+      >
         <div class="gauge-fill" style={{ width: `${Math.round(fill * 100)}%`, background: f ? band.color : undefined }} />
       </div>
       <div class="gauge-limitline">
@@ -77,14 +85,18 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
       {series.length > 1 && (
         <div class="gauge-graphwrap">
           <span class="gauge-graphtitle">
-            Tokens carried per turn{sampled ? ` · ${series.length} turns` : ''}
+            This chat: tokens carried per turn{sampled ? ` · ${series.length} turns` : ''}
           </span>
           <div class="gauge-graph">
             <div class="gauge-yaxis">
               <span>{fmtNum(peak)}</span>
               <span>0</span>
             </div>
-            <div class="gauge-plot">
+            <div
+              class="gauge-plot"
+              role="img"
+              aria-label={`Context trend across ${series.length} turns; peak ${fmtNum(peak)} tokens; ${resets} resets`}
+            >
               <div class="gauge-spark">
                 {bars.map((d, i) => (
                   <span
@@ -96,6 +108,7 @@ export function SustainabilityGauge({ forecast }: { forecast?: ForecastView }) {
                       background: i === bars.length - 1 ? band.color : 'var(--vscode-descriptionForeground, #8b949e)',
                       opacity: i === bars.length - 1 ? 1 : 0.4,
                     }}
+                    aria-hidden="true"
                   />
                 ))}
               </div>

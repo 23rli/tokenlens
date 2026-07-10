@@ -25,3 +25,5 @@ eslint.config.mjs
 !README.md
 !CHANGELOG.md
 !LICENSE
+.preview.html
+dist/diag.cjs

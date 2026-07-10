@@ -29,6 +29,8 @@ export interface ParsedTurn {
 
 export interface ParsedTranscript {
   sessionId: string;
+  /** Stable creation time from `session.start`, used for the omitted first prompt. */
+  startTime?: string;
   turns: ParsedTurn[];
 }
 

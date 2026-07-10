@@ -23,14 +23,17 @@ export class CopilotWatcher implements vscode.Disposable {
   private readonly pendingSince = new Map<string, number>();
   /** Last-seen mtime per session, so we only re-read a chat that actually changed. */
   private readonly sessionMtimes = new Map<string, number>();
-  private readonly root = getWorkspaceStorageRoot();
+  private readonly root: string;
   private debounce?: ReturnType<typeof setTimeout>;
   private poll?: ReturnType<typeof setInterval>;
 
   constructor(
     private readonly onEvent: (event: PromptEvent, meta?: { preliminary?: boolean }) => void,
     private readonly onlyHash?: string,
-  ) {}
+    root = getWorkspaceStorageRoot(),
+  ) {
+    this.root = root;
+  }
 
   isAvailable(): boolean {
     try {

@@ -49,6 +49,15 @@ export function readSessionEvents(paths: CopilotSessionPaths, userId = 'local-us
 
   // Transcript turns that carry a real user prompt (a `user.message`), in order.
   const transcriptTurns = parsed.turns.filter((t) => (t.promptText ?? '').trim().length > 0);
+  const firstPromptTurn = parsed.turns.findIndex(
+    (t) => (t.promptText ?? '').trim().length > 0,
+  );
+  // Copilot's response to the omitted first prompt appears as a leading turn with
+  // no promptText. Keep its response/tools instead of discarding useful history.
+  const leadingTurns = parsed.turns.slice(
+    0,
+    firstPromptTurn < 0 ? parsed.turns.length : firstPromptTurn,
+  );
   const u = transcriptTurns.length;
 
   const maxTokenKey = tokensByTurn.size > 0 ? Math.max(...tokensByTurn.keys()) : -1;
@@ -65,7 +74,7 @@ export function readSessionEvents(paths: CopilotSessionPaths, userId = 'local-us
 
   const events: PromptEvent[] = [];
   for (let n = 0; n < total; n++) {
-    const turn = n >= offset ? transcriptTurns[n - offset] : undefined;
+    const turn = n >= offset ? transcriptTurns[n - offset] : leadingTurns[n];
     let promptText = (turn?.promptText ?? '').trim();
     if (!promptText) promptText = earlyPrompts.get(n) ?? promptByRequest.get(n) ?? '';
     if (!promptText) continue;
@@ -88,7 +97,11 @@ export function readSessionEvents(paths: CopilotSessionPaths, userId = 'local-us
         promptText,
         responseText: turn?.responseText || undefined,
         toolCalls: turn?.toolCalls ?? [],
-        timestamp: turn?.startTime,
+        // Copilot omits the first user.message, but session.start is stable and
+        // dates that first request correctly. Never use mutable file mtime here:
+        // touching an old chat would otherwise make its early turns look "today".
+        timestamp:
+          (turn?.promptText ? turn.startTime : parsed.startTime) ?? new Date(0).toISOString(),
         model,
         inputTokensOverride: real?.promptTokens,
         outputTokensOverride: real?.completionTokens,

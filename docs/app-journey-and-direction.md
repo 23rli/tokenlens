@@ -1,6 +1,6 @@
-# Tokentama — App Journey & Direction
+# Token Lens — App Journey & Direction
 
-_Last updated: 2026-07-07 · package version 0.1.2 · 136 unit tests green_
+_Last updated: 2026-07-10 · package version 0.6.9_
 
 > **Current direction: see §10 (2026-07-07 decision — build for real-time visibility + precognition,
 > no savings claim).** §9 is the pivot exploration that led here; §§1–8 are the journey and evidence.

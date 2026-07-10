@@ -2,7 +2,7 @@
   "name": "tokentama",
   "displayName": "Token Lens",
   "description": "Real-time cost visibility and forecasting for GitHub Copilot: see what each chat spends, where the tokens go, and what your next turn will cost — live, local, read-only.",
-  "version": "0.6.2",
+  "version": "0.6.10",
   "publisher": "tokentama",
   "license": "MIT",
   "repository": {
@@ -30,6 +30,11 @@
     "context"
   ],
   "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#181818",
+    "theme": "dark"
+  },
+  "qna": "marketplace",
   "main": "./dist/extension.js",
   "activationEvents": [
     "onStartupFinished"
@@ -65,59 +70,45 @@
         "category": "Token Lens"
       },
       {
-        "command": "tokenlens.compactSession",
-        "title": "Compact chat (fresh chat + summary)",
-        "category": "Token Lens",
-        "icon": "$(combine)"
+        "command": "tokenlens.pinChat",
+        "title": "Pin to this chat",
+        "category": "Token Lens"
+      },
+      {
+        "command": "tokenlens.unpinChat",
+        "title": "Unpin chat",
+        "category": "Token Lens"
       },
       {
         "command": "tokenlens.diagnostics",
         "title": "Show capture diagnostics",
-        "category": "Token Lens",
-        "icon": "$(info)"
+        "category": "Token Lens"
       },
       {
         "command": "tokenlens.captureSelfTest",
-        "title": "Capture self-test (what is it reading?)",
-        "category": "Token Lens",
-        "icon": "$(checklist)"
+        "title": "Capture self-test",
+        "category": "Token Lens"
       }
     ],
-    "menus": {
-      "view/title": []
-    },
     "configuration": {
       "title": "Token Lens",
       "properties": {
         "tokenlens.passiveCapture.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Passively read VS Code Copilot chat sessions to track token usage. Read-only."
+          "description": "Passively read VS Code Copilot chat sessions to track token usage. Read-only. When off, automatic reads stop; explicit diagnostics/self-test commands can still read on demand."
         },
         "tokenlens.impact.usdPerMillionTokens": {
           "type": "number",
+          "minimum": 0,
           "default": 0.58,
           "description": "Blended, cache-inclusive US dollars per 1,000,000 tokens — the preferred $ cost basis. Set this to YOUR effective rate for an accurate figure, or 0 to fall back to the credit-based estimate."
         },
         "tokenlens.impact.usdPerCredit": {
           "type": "number",
+          "minimum": 0,
           "default": 0,
           "description": "US dollars per Copilot AI credit (AIC). Only used when 'usdPerMillionTokens' is 0."
-        },
-        "tokenlens.capture.mode": {
-          "type": "string",
-          "enum": [
-            "hybrid",
-            "event",
-            "disk"
-          ],
-          "enumDescriptions": [
-            "Live event path reconciled against on-disk sessions for real tokens (recommended).",
-            "Live event path only — no on-disk watcher.",
-            "On-disk watcher only."
-          ],
-          "default": "hybrid",
-          "description": "How Token Lens captures Copilot token usage."
         },
         "tokenlens.capture.scope": {
           "type": "string",
@@ -136,10 +127,11 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run package",
     "build": "node esbuild.mjs",
     "watch": "node esbuild.mjs --watch",
     "package": "node esbuild.mjs --production",
-    "vsce:package": "vsce package",
+    "vsce:package": "vsce package --no-dependencies",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -157,14 +149,14 @@
     "probe:viability": "node scripts/run-bench.mjs probe-viability.ts"
   },
   "dependencies": {
-    "preact": "^10.25.4"
+    "preact": "^10.29.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/vscode": "^1.90.0",
     "@vscode/vsce": "^3.2.1",
-    "esbuild": "^0.24.2",
+    "esbuild": "^0.28.1",
     "typescript": "^5.7.2",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.9"
   }
 }

@@ -11,19 +11,19 @@ workaround. Status legend: **Fixed** · **Mitigated** (handled but has a residua
 ### 1. A new *empty* window (no folder)
 - **Symptom (old):** A blank window used to show the previous window's chat and aggregate every workspace's sessions ("weird chats").
 - **Cause:** An empty window has no workspace hash to scope by, so it fell back to the globally-newest session and a global "All chats" total.
-- **Status:** **Mitigated.** Empty windows now only track sessions **modified since the window opened** — i.e. the chat you actually start there. It shows an empty state until you send a prompt, then follows *your* chat; it never inherits the previous window's, and "All chats" only counts this window's chats.
-- **Residual:** If you *reopen* an old chat in the empty window and send a message, it (correctly) starts tracking from then. Full isolation still comes from opening a folder.
+- **Status:** **Mitigated.** Empty windows now ignore sessions last modified before the window opened. This prevents immediate inheritance of an old chat and keeps the initial state empty.
+- **Residual:** Copilot's files contain no empty-window identity. A chat modified in another window after this one opens can therefore still be selected. Full isolation comes from opening a folder; pinning helps after the intended chat is visible.
 
 ### 2. Two windows on the *same folder* track the same chat
 - **Symptom:** Both windows show the same session; one can "steal" the other.
 - **Cause:** VS Code stores a folder's Copilot chats under one shared workspace hash, so both windows read the same files and both follow the newest chat in that hash.
 - **Status:** **Inherent.** There's no per-window signal on disk to tell the two apart.
-- **Workaround:** Use one window per folder (VS Code discourages duplicates anyway).
+- **Workaround:** Use one window per folder (VS Code discourages duplicates anyway), or run **Token Lens: Pin to this chat** to lock the dashboard onto the chat you want.
 
 ### 3. Two *empty* windows both actively chatting can interfere
 - **Symptom:** The dashboard jumps between the two chats.
 - **Cause:** Neither has a workspace hash, so both follow the globally-newest chat.
-- **Status:** **Inherent** (rare). Open a folder in at least one for isolation.
+- **Status:** **Inherent** (rare). Open a folder in at least one for isolation, or use **Token Lens: Pin to this chat** to lock onto the one you're watching.
 
 ### 4. Only VS Code's GitHub Copilot is supported
 - **Symptom:** No data in other editors (Visual Studio, JetBrains) or other AI assistants.

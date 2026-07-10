@@ -34,9 +34,9 @@ export interface ModelInfo {
 }
 
 /**
- * Token + cost estimate for a turn. Counts are estimated with a tokenizer
- * (they are not metered on disk) but priced with the REAL per-model rates that
- * Copilot ships in models.json. `estimated` is therefore almost always true.
+ * Token + cost data for a turn. Copilot's on-disk prompt/completion counts are
+ * used when available; a local tokenizer is the clearly-labelled fallback.
+ * Credit estimates use the per-model rates Copilot ships in models.json.
  */
 export interface TokenEstimate {
   inputTokens: number;

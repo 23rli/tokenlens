@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { randomBytes } from 'node:crypto';
 
 /** Build the webview HTML shell with a strict CSP + nonce-gated script. */
 export function buildDashboardHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
@@ -9,11 +10,9 @@ export function buildDashboardHtml(webview: vscode.Webview, extensionUri: vscode
   const styleUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, 'dist', 'webview.css'),
   );
-  const mediaUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media'));
-
   const csp = [
     `default-src 'none'`,
-    `img-src ${webview.cspSource} https: data:`,
+    `img-src ${webview.cspSource} data:`,
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     `font-src ${webview.cspSource}`,
     `script-src 'nonce-${nonce}'`,
@@ -36,10 +35,5 @@ export function buildDashboardHtml(webview: vscode.Webview, extensionUri: vscode
 }
 
 function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let text = '';
-  for (let i = 0; i < 32; i++) {
-    text += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return text;
+  return randomBytes(24).toString('base64url');
 }

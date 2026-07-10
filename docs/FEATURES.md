@@ -8,7 +8,7 @@ Everything is **read-only** and **local**. Token Lens reads VS Code's on-disk Co
 
 ## 1. Scope model (how to read every number)
 
-Tokentama scopes everything to **the workspace of the window you have open** — other VS Code windows' chats never bleed in. Within that, four scopes appear across the UI:
+By default, a folder window is scoped to **that folder's VS Code workspace storage**. The optional `all` scope deliberately aggregates every window, while an empty window can only approximate isolation from chats touched after it opened. Within that, four scopes appear across the UI:
 
 | Term | Meaning |
 |---|---|
@@ -24,7 +24,7 @@ The word "session" is intentionally **not** used in the UI because it was ambigu
 
 ## 2. Dashboard panels
 
-Open with **Tokentama: Open dashboard** (or the activity-bar icon). Two tabs: **Dashboard** and **History**.
+Open with **Token Lens: Open dashboard** (or the activity-bar icon). Three tabs: **Dashboard**, **History**, and **Info**.
 
 ### Chat header
 Shows the active chat's title (or `Chat <id>`) and the current turn number.
@@ -44,7 +44,7 @@ Shows the active chat's title (or `Chat <id>`) and the current turn number.
 Input tokens split by category (**system / tools / history / message**) as stacked bars for **This prompt → This chat → All chats · N**, sharing one color legend. Data comes straight from Copilot's on-disk `promptTokenDetails`.
 
 ### Total cost card
-Three measured figures for **all chats in this workspace** — **Tokens**, **AICs** (Copilot credits), and **Cost** — each with the last turn's delta (`▲`). Dollars are a derived estimate (see config below); tokens and AICs are what Copilot actually meters.
+Three figures — **Tokens**, **AICs** (Copilot credits), and **Cost** — selectable for the workspace, this chat, or today. Each shows the last metered turn's matching-unit delta (`▲`). Dollars are a derived estimate (see config below); AIC totals are marked estimated if any turn lacks a metered credit value.
 
 ### Live Copilot data card
 The active model/agent and its reasoning effort (shown only when known).
@@ -68,39 +68,32 @@ A scrollable, newest-first list of every recorded turn: turn #, prompt excerpt, 
 ## 4. Data source & privacy
 
 - Reads VS Code's per-workspace Copilot storage: transcript `.jsonl` files and `chatSessions` (for real metered tokens and credits).
-- Scoped to this window's workspace hash by default; capture never picks up other windows.
-- **Read-only.** No prompt text leaves your machine. Optional pilot telemetry is opt-in and export-only.
+- Scoped to this window's workspace hash by default. `capture.scope=all` deliberately aggregates all windows; empty windows have the limitations documented in `KNOWN-ISSUES.md`.
+- **Read-only.** No prompt text leaves your machine, and there is no telemetry or network upload.
 
 ---
 
-## 5. Commands (Command Palette → "Tokentama")
+## 5. Commands (Command Palette → "Token Lens")
 
 | Command | What it does |
 |---|---|
-| **Open Tokentama dashboard** | Reveal/focus the dashboard view. |
+| **Open dashboard** | Reveal/focus the dashboard view. |
 | **Toggle passive capture** | Start/stop reading Copilot sessions on disk. |
-| **Show capture diagnostics** | Print what Tokentama can see (paths, sessions). |
-| **Capture self-test** | Diagnose what is being read right now. |
-| **Compact session (fresh chat + summary)** | Copy a lean recap of the current chat and open a new Copilot chat — drop re-sent history. |
-| **Reset ecosystem** | Clear Tokentama's local state (confirmation required). |
-| **Export pilot data (JSON + CSV)** | Export opt-in telemetry to a folder you pick. |
-| **Set coaching LLM API key** | Store a provider key securely (legacy coaching). |
-
-_Legacy commands still present pending the rebrand/cleanup: Score this prompt, Scan recent Copilot prompts, Run Tokentama demo, Ingest Copilot history into corpus, Export training corpus._
+| **Pin to this chat** | Lock tracking onto the current chat so Token Lens keeps showing it even if a newer chat appears (useful when two windows share a folder). |
+| **Unpin chat** | Clear the pin and follow the newest chat again. |
+| **Show capture diagnostics** | Print scope, active-chat, and watcher details to Output → Token Lens. |
+| **Capture self-test** | Verify that the active chat can be parsed and report how many turns are metered. |
 
 ---
 
-## 6. Key settings (`tokentama.*`)
+## 6. Key settings (`tokenlens.*`)
 
 | Setting | Default | Purpose |
 |---|---|---|
 | `impact.usdPerMillionTokens` | `0.58` | **Preferred cost basis** — blended, cache-inclusive $/1M tokens. Set to your real effective rate for an accurate figure. `0` falls back to the credit rate. |
 | `impact.usdPerCredit` | `0` | $/AIC, used only when the token rate is `0`. |
-| `capture.mode` | `hybrid` | `hybrid` (recommended), `event`, or `disk`. |
-| `capture.scope` | this window | `all` to track the newest Copilot session in any window. |
-| `passiveCapture.enabled` | `true` | Read Copilot sessions automatically (read-only). |
-
-_Legacy/experimental settings still present: `coaching.*`, `sustainability.*`, `impact.co2GramsPer1kTokens`, `impact.waterMlPer1kTokens`, `health.*`. These belong to the deprecated scoring/pet system and are slated for cleanup._
+| `capture.scope` | `window` | `window` keeps each window isolated; `all` follows the newest Copilot chat in any window. |
+| `passiveCapture.enabled` | `true` | Read Copilot sessions automatically (read-only). When off, only explicit diagnostics/self-test commands read on demand. |
 
 ---
 
@@ -109,7 +102,8 @@ _Legacy/experimental settings still present: `coaching.*`, `sustainability.*`, `
 Token Lens began as a prompt-efficiency **scoring + tamagotchi** tool, then pivoted to
 pure cost visibility + forecasting. As of the v0.5.0 cleanup, the legacy subsystems are
 **fully removed** from the codebase: the prompt scoring service, the rewriter, the
-training corpus, the LLM/heuristic coach (except one text helper reused by the compact
-command), telemetry, the pet health/world model, and ~11 unused webview components. The
+training corpus, the live LLM/heuristic coach, telemetry, the pet health/world model, and
+~11 unused webview components. A rewrite helper remains only for reproducible historical
+benchmarks. The
 state contract (`TamaState`) is now just `{ metrics, model, captureEnabled, forecast }`,
 and the dashboard is driven entirely by the on-disk forecast.

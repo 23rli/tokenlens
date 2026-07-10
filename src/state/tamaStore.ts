@@ -8,7 +8,7 @@ import type { TamaState, ForecastView, SuccessMetrics } from '../webview/contrac
  * webview + status bar on every change. (The pre-pivot pet/health/scoring state
  * has been removed — the dashboard is driven entirely by the on-disk forecast.)
  */
-export class TamaStore {
+export class TamaStore implements vscode.Disposable {
   private readonly _onDidChange = new vscode.EventEmitter<TamaState>();
   readonly onDidChange = this._onDidChange.event;
 
@@ -27,17 +27,31 @@ export class TamaStore {
   }
 
   async setCaptureEnabled(enabled: boolean): Promise<void> {
-    this._captureEnabled = enabled;
     await vscode.workspace
       .getConfiguration('tokenlens.passiveCapture')
       .update('enabled', enabled, vscode.ConfigurationTarget.Global);
+    this.syncCaptureEnabled(enabled);
+  }
+
+  /** Apply a setting changed outside the dashboard without writing it back again. */
+  syncCaptureEnabled(enabled: boolean): void {
+    if (this._captureEnabled === enabled) return;
+    this._captureEnabled = enabled;
     this.emit();
   }
 
   /** Update the live next-turn forecast (precognition) + active model; refresh UI. */
   setForecast(forecast: ForecastView, model?: ModelInfo): void {
     this.forecast = forecast;
-    if (model) this.model = model;
+    // Clear the previous chat's model when the new chat has no model metadata.
+    this.model = model;
+    this.emit();
+  }
+
+  /** Remove a snapshot that no longer has an in-scope chat behind it. */
+  clearForecast(): void {
+    this.forecast = undefined;
+    this.model = undefined;
     this.emit();
   }
 
@@ -47,9 +61,12 @@ export class TamaStore {
   }
 
   getState(): TamaState {
-    const rate = vscode.workspace
+    const tokenRate = vscode.workspace
       .getConfiguration('tokenlens.impact')
       .get<number>('usdPerMillionTokens', 0.58);
+    const creditRate = vscode.workspace
+      .getConfiguration('tokenlens.impact')
+      .get<number>('usdPerCredit', 0);
     // Zero-state fallback metrics; ImpactTrio prefers the whole-chat forecast
     // totals when present, so these only show before a forecast lands.
     const metrics: SuccessMetrics = {
@@ -57,7 +74,7 @@ export class TamaStore {
       totalCostUsd: 0,
       totalCredits: 0,
       totalCreditsEstimated: true,
-      hasUsdRate: rate > 0,
+      hasUsdRate: tokenRate > 0 || creditRate > 0,
     };
     return {
       metrics,
@@ -69,5 +86,9 @@ export class TamaStore {
 
   private emit(): void {
     this._onDidChange.fire(this.getState());
+  }
+
+  dispose(): void {
+    this._onDidChange.dispose();
   }
 }

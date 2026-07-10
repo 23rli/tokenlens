@@ -2,22 +2,37 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { TamaStore } from './state/tamaStore';
 import { CopilotWatcher } from './capture/CopilotWatcher';
-import { findActiveSession, listCopilotSessions } from './capture/copilotPaths';
+import { getWorkspaceStorageRoot, listCopilotSessions } from './capture/copilotPaths';
+import {
+  normalizeCaptureScope,
+  scopeHash,
+  selectSessionsInScope,
+} from './capture/sessionScope';
 import { readSessionEvents, readSessionTitle } from './capture/copilotReader';
 import { StatusBar } from './status/statusBar';
 import { DashboardViewProvider } from './webview/DashboardViewProvider';
-import { buildSessionSummary } from './analysis/sessionSummary';
 import { ForecastService } from './analysis/forecastService';
 import { buildForecastView } from './analysis/forecastView';
+import { configuredCostUsd, creditAmount } from './analysis/cost';
 import type { ForecastView } from './webview/contract';
 import type { PromptEvent, ContextSlice } from '@tokentama/shared-types';
 
+const FORECAST_HISTORY_LIMIT = 200;
+
 export function activate(context: vscode.ExtensionContext): void {
   const store = new TamaStore();
+  context.subscriptions.push(store);
   // When this window's extension started — used to scope EMPTY windows (which have
   // no workspace hash) to chats touched since the window opened, so they don't
   // inherit the previous window's chat.
   const activatedAt = Date.now();
+
+  // Optional per-workspace pin: the session id the user locked onto so Token Lens
+  // keeps tracking it instead of following the newest chat (resolves same-folder /
+  // two-empty-window ties). Stored in workspaceState so it survives a reload.
+  const PINNED_KEY = 'tokenlens.pinnedSessionId';
+  const getPinnedSessionId = (): string | undefined =>
+    context.workspaceState.get<string>(PINNED_KEY);
 
   const output = vscode.window.createOutputChannel('Token Lens');
   context.subscriptions.push(output);
@@ -26,10 +41,11 @@ export function activate(context: vscode.ExtensionContext): void {
   log('Token Lens activated.');
 
   const workspaceHash = deriveWorkspaceHash(context);
+  const workspaceStorageRoot = deriveWorkspaceStorageRoot(context);
   log(
     workspaceHash
       ? `Capture scoped to this window's workspace storage (${workspaceHash}).`
-      : 'No workspace folder open — capture tracks the most recent Copilot session in ANY window. Open a folder for window-scoped capture.',
+      : 'No workspace folder open — capture starts empty and follows chats touched after this window opened. Open a folder for stronger isolation.',
   );
 
   // Precognition core: rebuild the live forecast from the ACTIVE session on disk
@@ -40,39 +56,44 @@ export function activate(context: vscode.ExtensionContext): void {
   // conversation when something on disk actually changed.
   let chatAggCache:
     | {
-        freshest: number;
-        count: number;
+        signature: string;
+        day: string;
         breakdown: ContextSlice[];
         input: number;
         output: number;
         credits: number;
-        creditsReal: boolean;
+        creditsEstimated: boolean;
+        todayInput: number;
+        todayOutput: number;
+        todayCredits: number;
+        todayCreditsEstimated: boolean;
       }
     | undefined;
+  let lastRefreshError: string | undefined;
   const refreshForecast = (): void => {
+    // The capture toggle is a privacy boundary, not just a watcher preference.
+    // When off, no timer/focus/view refresh may read Copilot's files.
+    if (!store.captureEnabled) return;
     try {
-      const scope = vscode.workspace
-        .getConfiguration('tokenlens.capture')
-        .get<string>('scope', 'window');
-      // Sessions in scope for THIS window:
-      //  - folder window: only this workspace's sessions (fully isolated).
-      //  - scope='all': every session in every window (explicit opt-in).
-      //  - empty window: only sessions touched since this window opened, so it
-      //    tracks the chat you start here instead of inheriting another window's.
-      const allSessions =
-        scope !== 'all' && workspaceHash
-          ? listCopilotSessions(undefined, workspaceHash)
-          : scope === 'all'
-            ? listCopilotSessions(undefined, undefined)
-            : listCopilotSessions(undefined, undefined).filter((s) => s.modifiedMs >= activatedAt);
-      // listCopilotSessions sorts newest-first, so [0] is the active session.
-      const session = allSessions[0];
+      const scope = normalizeCaptureScope(
+        vscode.workspace.getConfiguration('tokenlens.capture').get('scope', 'window'),
+      );
+      // Sessions in scope for THIS window (folder / scope=all / empty-window since
+      // open), with the active chat chosen pin-aware — see sessionScope.ts.
+      const { sessions: allSessions, active: session } = selectSessionsInScope(
+        listCopilotSessions(workspaceStorageRoot, scopeHash(scope, workspaceHash)),
+        { scope, workspaceHash, activatedAt, pinnedSessionId: getPinnedSessionId() },
+      );
       if (!session) {
-        store.ping();
+        chatAggCache = undefined;
+        store.clearForecast();
         return;
       }
       const events = readSessionEvents(session);
-      if (events.length === 0) return;
+      if (events.length === 0) {
+        store.clearForecast();
+        return;
+      }
       // Metered turns drive the forecast HISTORY; the newest turn overall is the
       // CURRENT prompt the user just wrote — it may not be metered yet (chatSessions
       // lags the transcript), but we still show it and predict from it so the panel
@@ -82,6 +103,11 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       const current = events[events.length - 1];
       const lastReal = real.length ? real[real.length - 1] : undefined;
+      const currentIsMetered = !!(
+        current.tokens &&
+        current.tokens.estimated === false &&
+        (current.tokens.inputTokens ?? 0) > 0
+      );
       // Every user turn (metered or not) for the History list — so a just-sent turn
       // shows up immediately as "pending" and fills in once Copilot meters it.
       const allTurns = events
@@ -93,7 +119,9 @@ export function activate(context: vscode.ExtensionContext): void {
         }));
 
       const fs = new ForecastService();
-      for (const e of real) {
+      // Replaying accuracy is intentionally quadratic in the calibration window;
+      // cap it so pathological multi-thousand-turn chats cannot stall the host.
+      for (const e of real.slice(-FORECAST_HISTORY_LIMIT)) {
         fs.recordTurn(
           {
             promptTokens: e.tokens!.inputTokens,
@@ -104,8 +132,12 @@ export function activate(context: vscode.ExtensionContext): void {
           { maxInputTokens: e.model?.maxInputTokens, contextMaxTokens: e.model?.contextMaxTokens },
         );
       }
-      // Predict the CURRENT turn, conditioned on the prompt actually written.
-      const forecast = fs.forecastNext(current.promptText);
+      // While a turn is in flight, estimate that known prompt honestly. Once it
+      // is metered, switch back to a true next-turn structural forecast.
+      const forecastTarget: ForecastView['forecastTarget'] = currentIsMetered
+        ? 'next'
+        : 'pending';
+      const forecast = fs.forecastNext(forecastTarget === 'pending' ? current.promptText : '');
       const modelEvent = lastReal ?? current;
       // Session-wide breakdown: sum each category's tokens across every real turn.
       const sessionAgg = new Map<string, { category: string; label: string; tokens: number }>();
@@ -117,6 +149,15 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
       const sessionInputTokens = real.reduce((sum, e) => sum + (e.tokens?.inputTokens ?? 0), 0);
+      const sessionOutputTokens = real.reduce((sum, e) => sum + (e.tokens?.outputTokens ?? 0), 0);
+      // This-chat credit total (real metered when available, else estimated).
+      let sessionCredits = 0;
+      let sessionCreditsEstimated = real.length === 0;
+      for (const e of real) {
+        const credit = creditAmount(e.tokens);
+        sessionCredits += credit.value;
+        sessionCreditsEstimated ||= credit.estimated;
+      }
       const sessionBreakdown = [...sessionAgg.values()].map((s) => ({
         category: s.category,
         label: s.label,
@@ -125,17 +166,32 @@ export function activate(context: vscode.ExtensionContext): void {
       }));
       // Whole-chat breakdown: aggregate every conversation in scope (this window)
       // so the split reflects total spend and doesn't reset when a new chat starts.
-      const freshest = allSessions.reduce((m, s) => Math.max(m, s.modifiedMs), 0);
+      const sessionSignature = allSessions
+        .map((s) => `${s.workspaceHash}/${s.sessionId}:${s.modifiedMs}`)
+        .join('|');
+      // 'Today' = turns whose real timestamp falls on the local calendar day; the
+      // day key invalidates the cache at midnight so the figure rolls over.
+      const todayKey = new Date().toDateString();
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      const todayMs = startOfToday.getTime();
+      const startOfTomorrow = new Date(startOfToday);
+      startOfTomorrow.setDate(startOfTomorrow.getDate() + 1);
+      const tomorrowMs = startOfTomorrow.getTime();
       if (
         !chatAggCache ||
-        chatAggCache.freshest !== freshest ||
-        chatAggCache.count !== allSessions.length
+        chatAggCache.signature !== sessionSignature ||
+        chatAggCache.day !== todayKey
       ) {
         const chatAgg = new Map<string, { category: string; label: string; tokens: number }>();
         let chatInput = 0;
         let chatOutput = 0;
         let chatCredits = 0;
-        let chatCreditsReal = false;
+        let chatCreditsEstimated = false;
+        let todayInput = 0;
+        let todayOutput = 0;
+        let todayCredits = 0;
+        let todayCreditsEstimated = false;
         for (const s of allSessions) {
           const evs = s.sessionId === session.sessionId ? events : readSessionEvents(s);
           for (const e of evs) {
@@ -143,11 +199,15 @@ export function activate(context: vscode.ExtensionContext): void {
             if (!t || t.estimated !== false || (t.inputTokens ?? 0) <= 0) continue;
             chatInput += t.inputTokens ?? 0;
             chatOutput += t.outputTokens ?? 0;
-            if (t.copilotCredits != null) {
-              chatCredits += t.copilotCredits;
-              chatCreditsReal = true;
-            } else {
-              chatCredits += t.estimatedCredits ?? 0;
+            const credit = creditAmount(t);
+            chatCredits += credit.value;
+            chatCreditsEstimated ||= credit.estimated;
+            const ts = e.timestamp ? Date.parse(e.timestamp) : NaN;
+            if (!Number.isNaN(ts) && ts >= todayMs && ts < tomorrowMs) {
+              todayInput += t.inputTokens ?? 0;
+              todayOutput += t.outputTokens ?? 0;
+              todayCredits += credit.value;
+              todayCreditsEstimated ||= credit.estimated;
             }
             for (const sl of t.contextBreakdown ?? []) {
               const cur3 = chatAgg.get(sl.label) ?? { category: sl.category, label: sl.label, tokens: 0 };
@@ -157,12 +217,16 @@ export function activate(context: vscode.ExtensionContext): void {
           }
         }
         chatAggCache = {
-          freshest,
-          count: allSessions.length,
+          signature: sessionSignature,
+          day: todayKey,
           input: chatInput,
           output: chatOutput,
           credits: chatCredits,
-          creditsReal: chatCreditsReal,
+          creditsEstimated: chatInput === 0 || chatCreditsEstimated,
+          todayInput,
+          todayOutput,
+          todayCredits,
+          todayCreditsEstimated: todayInput === 0 || todayCreditsEstimated,
           breakdown: [...chatAgg.values()].map((s) => ({
             category: s.category,
             label: s.label,
@@ -177,11 +241,35 @@ export function activate(context: vscode.ExtensionContext): void {
       const usdPerMillionTokens = vscode.workspace
         .getConfiguration('tokenlens.impact')
         .get<number>('usdPerMillionTokens', 0.58);
+      const usdPerCredit = vscode.workspace
+        .getConfiguration('tokenlens.impact')
+        .get<number>('usdPerCredit', 0);
+      const costOf = (tokens: number, credits: number): number | undefined =>
+        configuredCostUsd(tokens, credits, usdPerMillionTokens, usdPerCredit);
       const chatTotalTokens = chatAggCache.input + chatAggCache.output;
-      const chatCostUsd =
-        usdPerMillionTokens > 0 ? (chatTotalTokens * usdPerMillionTokens) / 1_000_000 : undefined;
+      const sessionTotalTokens = sessionInputTokens + sessionOutputTokens;
+      const todayTotalTokens = chatAggCache.todayInput + chatAggCache.todayOutput;
+      const chatCostUsd = costOf(chatTotalTokens, chatAggCache.credits);
+      const sessionCostUsd = costOf(sessionTotalTokens, sessionCredits);
+      const todayCostUsd = costOf(todayTotalTokens, chatAggCache.todayCredits);
+      const lastTurnTotalTokens = lastReal
+        ? (lastReal.tokens?.inputTokens ?? 0) + (lastReal.tokens?.outputTokens ?? 0)
+        : undefined;
+      const lastRealCredit = creditAmount(lastReal?.tokens);
+      const lastTurnCredits = lastReal && !lastRealCredit.estimated
+        ? lastRealCredit.value
+        : undefined;
+      const lastTurnCostUsd = lastTurnTotalTokens != null
+        ? costOf(lastTurnTotalTokens, lastRealCredit.value)
+        : undefined;
+      const lastRealTimestamp = lastReal?.timestamp ? Date.parse(lastReal.timestamp) : NaN;
+      const lastTurnIsToday =
+        !Number.isNaN(lastRealTimestamp) &&
+        lastRealTimestamp >= todayMs &&
+        lastRealTimestamp < tomorrowMs;
       store.setForecast(
         buildForecastView(forecast, fs.accuracy(), modelEvent, {
+          forecastTarget,
           sessionShortId: session.sessionId.slice(0, 8),
           sessionTitle: readSessionTitle(session),
           lastPromptPreview: current.promptText.replace(/\s+/g, ' ').trim().slice(0, 140),
@@ -189,7 +277,10 @@ export function activate(context: vscode.ExtensionContext): void {
           contextSeries: real.map((e) => e.tokens!.inputTokens),
           turnPrompts: real.map((e) => e.promptText.replace(/\s+/g, ' ').trim().slice(0, 70)),
           realLastInputTokens: lastReal?.tokens?.inputTokens,
-          realLastCredits: lastReal?.tokens?.copilotCredits ?? lastReal?.tokens?.estimatedCredits,
+          realLastTotalTokens: lastTurnTotalTokens,
+          realLastCredits: lastTurnCredits,
+          realLastCostUsd: lastTurnCostUsd,
+          realLastIsToday: lastTurnIsToday,
           contextBreakdown: lastReal?.tokens?.contextBreakdown,
           contextInputTokens: lastReal?.tokens?.inputTokens,
           sessionBreakdown: sessionBreakdown.length ? sessionBreakdown : undefined,
@@ -197,52 +288,57 @@ export function activate(context: vscode.ExtensionContext): void {
           chatBreakdown: chatAggCache.breakdown.length ? chatAggCache.breakdown : undefined,
           chatInputTokens: chatAggCache.input || undefined,
           chatSessionCount: allSessions.length || undefined,
+          aggregateScope:
+            scope === 'all' ? 'allWindows' : workspaceHash ? 'workspace' : 'emptyWindow',
           chatTotalTokens: chatTotalTokens || undefined,
           chatCredits: chatAggCache.credits || undefined,
-          chatCreditsEstimated: !chatAggCache.creditsReal,
+          chatCreditsEstimated: chatAggCache.creditsEstimated,
           chatCostUsd,
+          sessionTotalTokens: sessionTotalTokens || undefined,
+          sessionCredits: sessionCredits || undefined,
+          sessionCreditsEstimated,
+          sessionCostUsd,
+          todayTotalTokens: todayTotalTokens || undefined,
+          todayCredits: chatAggCache.todayCredits || undefined,
+          todayCreditsEstimated: chatAggCache.todayCreditsEstimated,
+          todayCostUsd,
           allTurns,
         }),
         modelEvent.model,
       );
-    } catch {
-      /* best-effort — the panel skeletons remain until data is available */
+      lastRefreshError = undefined;
+    } catch (error) {
+      const detail = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
+      if (detail !== lastRefreshError) {
+        log(`Forecast refresh failed: ${detail}`);
+        lastRefreshError = detail;
+      }
     }
   };
 
   const statusBar = new StatusBar();
   context.subscriptions.push(statusBar);
 
-  store.onDidChange((state) => statusBar.update(state));
+  context.subscriptions.push(store.onDidChange((state) => statusBar.update(state)));
   statusBar.update(store.getState());
 
   let watcher: CopilotWatcher | undefined;
   const startWatcher = (): void => {
     if (watcher) return;
     const captureCfg = vscode.workspace.getConfiguration('tokenlens.capture');
-    const mode = captureCfg.get<string>('mode', 'hybrid');
-    if (mode === 'event') {
-      log('Capture mode = event: on-disk watcher disabled. Enable hybrid/disk mode to reconcile real tokens.');
-      return;
-    }
     // Scope to this window's workspace when it has one; empty windows watch globally
     // (there's no window to scope to) so they still track the active chat.
-    const scope = captureCfg.get<string>('scope', 'window');
+    const scope = normalizeCaptureScope(captureCfg.get('scope', 'window'));
     const hashScope = scope !== 'all' && workspaceHash ? workspaceHash : undefined;
     watcher = new CopilotWatcher((event, meta) => {
       if (!meta?.preliminary) {
-        log(
-          `capture: turn ${event.turnIndex} — "${event.promptText
-            .slice(0, 60)
-            .replace(/\s+/g, ' ')}…"`,
-        );
+        log(`capture: chat ${event.sessionId.slice(0, 8)}, turn ${event.turnIndex}`);
         // Precognition: rebuild the next-turn forecast from the active session's
         // real metered tokens and refresh the panel (skeletons fill in).
         refreshForecast();
       }
-    }, hashScope);
+    }, hashScope, workspaceStorageRoot);
     watcher.start();
-    context.subscriptions.push(watcher);
     refreshForecast();
     log(
       watcher.isAvailable()
@@ -254,19 +350,27 @@ export function activate(context: vscode.ExtensionContext): void {
     watcher?.dispose();
     watcher = undefined;
   };
+  context.subscriptions.push({ dispose: stopWatcher });
 
-  const toggleCapture = (): void => {
+  const toggleCapture = async (): Promise<void> => {
     const next = !store.captureEnabled;
-    void store.setCaptureEnabled(next);
-    if (next) startWatcher();
-    else stopWatcher();
-    log(`passive capture ${next ? 'enabled' : 'disabled'}.`);
+    try {
+      await store.setCaptureEnabled(next);
+      if (next) startWatcher();
+      else stopWatcher();
+      log(`passive capture ${next ? 'enabled' : 'disabled'}.`);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      log(`Could not ${next ? 'enable' : 'disable'} capture: ${detail}`);
+      void vscode.window.showErrorMessage(`Token Lens could not update capture: ${detail}`);
+    }
   };
 
   const provider = new DashboardViewProvider(context.extensionUri, store, {
     toggleCapture,
     refresh: refreshForecast,
   });
+  context.subscriptions.push(provider);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(DashboardViewProvider.viewType, provider, {
       webviewOptions: { retainContextWhenHidden: true },
@@ -278,15 +382,123 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.executeCommand('tokenlens.dashboard.focus'),
     ),
     vscode.commands.registerCommand('tokenlens.toggleCapture', toggleCapture),
-    vscode.commands.registerCommand('tokenlens.diagnostics', () =>
-      showCaptureDiagnostics(workspaceHash, output),
-    ),
-    vscode.commands.registerCommand('tokenlens.captureSelfTest', () =>
-      captureSelfTest(workspaceHash, () => watcher, store, output),
-    ),
-    vscode.commands.registerCommand('tokenlens.compactSession', () =>
-      compactSession(workspaceHash, log),
-    ),
+    vscode.commands.registerCommand('tokenlens.pinChat', async () => {
+      try {
+        const scope = normalizeCaptureScope(
+          vscode.workspace.getConfiguration('tokenlens.capture').get('scope', 'window'),
+        );
+        const { active } = selectSessionsInScope(
+          listCopilotSessions(workspaceStorageRoot, scopeHash(scope, workspaceHash)),
+          { scope, workspaceHash, activatedAt, pinnedSessionId: undefined },
+        );
+        if (!active) {
+          void vscode.window.showInformationMessage(
+            'Token Lens: no active chat to pin yet — open Copilot Chat here and send a prompt first.',
+          );
+          return;
+        }
+        await context.workspaceState.update(PINNED_KEY, active.sessionId);
+        log(`pinned chat ${active.sessionId.slice(0, 8)}`);
+        void vscode.window.showInformationMessage(
+          `Token Lens pinned to this chat (${active.sessionId.slice(0, 8)}). It will keep tracking this chat until you unpin.`,
+        );
+        refreshForecast();
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        log(`Could not pin chat: ${detail}`);
+        void vscode.window.showErrorMessage(`Token Lens could not pin this chat: ${detail}`);
+      }
+    }),
+    vscode.commands.registerCommand('tokenlens.unpinChat', async () => {
+      await context.workspaceState.update(PINNED_KEY, undefined);
+      log('unpinned chat');
+      void vscode.window.showInformationMessage(
+        'Token Lens unpinned — following the newest chat again.',
+      );
+      refreshForecast();
+    }),
+    vscode.commands.registerCommand('tokenlens.diagnostics', () => {
+      try {
+        const scope = normalizeCaptureScope(
+          vscode.workspace.getConfiguration('tokenlens.capture').get('scope', 'window'),
+        );
+        const { sessions, active } = selectSessionsInScope(
+          listCopilotSessions(workspaceStorageRoot, scopeHash(scope, workspaceHash)),
+          { scope, workspaceHash, activatedAt, pinnedSessionId: getPinnedSessionId() },
+        );
+        const live = watcher?.diagnostics();
+        log('--- capture diagnostics ---');
+        log(`enabled=${store.captureEnabled} scope=${scope} workspace=${workspaceHash ?? 'empty'}`);
+        log(`sessions=${sessions.length} active=${active?.sessionId.slice(0, 8) ?? 'none'} pinned=${getPinnedSessionId()?.slice(0, 8) ?? 'none'}`);
+        log(`watcher=${watcher ? 'running' : 'stopped'} seen=${live?.seen ?? 0} pending=${live?.pending ?? 0} tracked=${live?.trackedSessions ?? 0}`);
+        output.show(true);
+        void vscode.window.showInformationMessage(
+          `Token Lens diagnostics: ${sessions.length} chat${sessions.length === 1 ? '' : 's'} visible; active ${active?.sessionId.slice(0, 8) ?? 'none'}. Details are in Output → Token Lens.`,
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        log(`Capture diagnostics failed: ${detail}`);
+        void vscode.window.showErrorMessage(`Token Lens diagnostics failed: ${detail}`);
+      }
+    }),
+    vscode.commands.registerCommand('tokenlens.captureSelfTest', () => {
+      try {
+        const scope = normalizeCaptureScope(
+          vscode.workspace.getConfiguration('tokenlens.capture').get('scope', 'window'),
+        );
+        const { active } = selectSessionsInScope(
+          listCopilotSessions(workspaceStorageRoot, scopeHash(scope, workspaceHash)),
+          { scope, workspaceHash, activatedAt, pinnedSessionId: getPinnedSessionId() },
+        );
+        if (!active) {
+          void vscode.window.showWarningMessage(
+            'Token Lens self-test: no in-scope Copilot chat found. Send a Copilot prompt in this window, then retry.',
+          );
+          return;
+        }
+        const events = readSessionEvents(active);
+        const metered = events.filter(
+          (event) => event.tokens?.estimated === false && (event.tokens.inputTokens ?? 0) > 0,
+        ).length;
+        const result = `${events.length} turn${events.length === 1 ? '' : 's'}, ${metered} metered`;
+        log(`capture self-test: PASS — chat ${active.sessionId.slice(0, 8)}, ${result}.`);
+        void vscode.window.showInformationMessage(`Token Lens self-test passed: ${result}.`);
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        log(`Capture self-test failed: ${detail}`);
+        void vscode.window.showErrorMessage(`Token Lens self-test failed: ${detail}`);
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      const captureEnabledChanged = event.affectsConfiguration(
+        'tokenlens.passiveCapture.enabled',
+      );
+      const scopeChanged = event.affectsConfiguration('tokenlens.capture.scope');
+      if (captureEnabledChanged) {
+        const enabled = vscode.workspace
+          .getConfiguration('tokenlens.passiveCapture')
+          .get<boolean>('enabled', true);
+        store.syncCaptureEnabled(enabled);
+        if (enabled) startWatcher();
+        else stopWatcher();
+      }
+      if (scopeChanged) {
+        chatAggCache = undefined;
+        stopWatcher();
+        if (store.captureEnabled) startWatcher();
+      }
+      if (
+        captureEnabledChanged ||
+        scopeChanged ||
+        event.affectsConfiguration('tokenlens.impact')
+      ) {
+        refreshForecast();
+        store.ping();
+      }
+    }),
   );
 
   if (store.captureEnabled) startWatcher();
@@ -294,9 +506,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Backstop: refresh the forecast shortly after activation and on a short timer,
   // so the panel stays live on its own — no reload, no click needed. Also refresh
   // the moment this window regains focus (you've usually just finished a turn).
-  setTimeout(refreshForecast, 800);
+  const warmupTimer = setTimeout(refreshForecast, 800);
   const forecastTimer = setInterval(refreshForecast, 1500);
-  context.subscriptions.push({ dispose: () => clearInterval(forecastTimer) });
+  context.subscriptions.push({
+    dispose: () => {
+      clearTimeout(warmupTimer);
+      clearInterval(forecastTimer);
+    },
+  });
   context.subscriptions.push(
     vscode.window.onDidChangeWindowState((s) => {
       if (s.focused) refreshForecast();
@@ -315,181 +532,12 @@ function deriveWorkspaceHash(context: vscode.ExtensionContext): string | undefin
   return path.basename(path.dirname(storage));
 }
 
-async function showCaptureDiagnostics(
-  workspaceHash: string | undefined,
-  output: vscode.OutputChannel,
-): Promise<void> {
-  const lines: string[] = ['', '=== Tokentama capture diagnostics ==='];
-  lines.push(
-    `scoped workspace hash: ${workspaceHash ?? '(none — empty window, reading globally)'}`,
-  );
-  try {
-    const scoped = listCopilotSessions(undefined, workspaceHash);
-    lines.push(`Copilot sessions in scope: ${scoped.length}`);
-
-    const active = findActiveSession(undefined, workspaceHash);
-    if (active) {
-      const events = readSessionEvents(active).filter((e) => e.promptText.trim());
-      const real = events.filter((e) => e.tokens && !e.tokens.estimated);
-      lines.push(`active session: ${active.sessionId} (hash ${active.workspaceHash})`);
-      lines.push(`  prompts: ${events.length} · with real tokens: ${real.length}`);
-      const last = events[events.length - 1];
-      if (last) lines.push(`  latest prompt: "${last.promptText.slice(0, 70).replace(/\s+/g, ' ')}"`);
-    } else {
-      lines.push('active session: none in scope — open Copilot Chat in THIS window and send a prompt.');
-    }
-
-    const globalActive = findActiveSession();
-    if (globalActive && globalActive.workspaceHash !== active?.workspaceHash) {
-      lines.push(
-        `note: the globally-newest Copilot session is in a DIFFERENT window (hash ${globalActive.workspaceHash}); scoping is correctly excluding it.`,
-      );
-    }
-  } catch (err) {
-    lines.push(`error: ${String(err)}`);
-  }
-
-  for (const line of lines) output.appendLine(line);
-  output.show(true);
-}
-
-/** Relative "time ago" for a mtime, for the self-test readout. */
-function timeAgo(ms: number): string {
-  if (!ms) return 'never';
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-  if (s < 60) return `${s}s ago`;
-  if (s < 3600) return `${Math.round(s / 60)}m ago`;
-  if (s < 86400) return `${Math.round(s / 3600)}h ago`;
-  return `${Math.round(s / 86400)}d ago`;
-}
-
-/**
- * Capture self-test: report exactly which chats capture sees, which turns it
- * would emit next, and confirm other windows' chats are excluded — so the numbers
- * can be trusted before relying on them.
- */
-function captureSelfTest(
-  workspaceHash: string | undefined,
-  getWatcher: () => CopilotWatcher | undefined,
-  store: TamaStore,
-  output: vscode.OutputChannel,
-): void {
-  const cfg = vscode.workspace.getConfiguration('tokenlens.capture');
-  const mode = cfg.get<string>('mode', 'hybrid');
-  const scope = cfg.get<string>('scope', 'window');
-  const hashScope = scope === 'all' ? undefined : workspaceHash;
-
-  const lines: string[] = ['', '=== Tokentama capture self-test ==='];
-  lines.push(`config: mode=${mode} · scope=${scope} · capture=${store.captureEnabled ? 'on' : 'off'}`);
-  lines.push(
-    `this window hash: ${workspaceHash ?? '(none — no folder open)'} → scanning: ${
-      hashScope ?? 'ALL windows'
-    }`,
-  );
-
-  const watcher = getWatcher();
-  if (watcher) {
-    const d = watcher.diagnostics();
-    lines.push(
-      `watcher: RUNNING · ${d.seen} turns already captured · ${d.pending} awaiting real tokens · ${d.trackedSessions} chats tracked`,
-    );
-  } else {
-    lines.push(
-      `watcher: NOT running (mode=event, capture off, or no window-scoped session). Live scoring uses @tokentama / compose.`,
-    );
-  }
-
-  let sessions: ReturnType<typeof listCopilotSessions> = [];
-  try {
-    sessions = listCopilotSessions(undefined, hashScope);
-  } catch {
-    sessions = [];
-  }
-  lines.push('', `in-scope chats (newest first): ${sessions.length}`);
-  sessions.slice(0, 8).forEach((s, i) => {
-    let events: ReturnType<typeof readSessionEvents> = [];
-    try {
-      events = readSessionEvents(s).filter((e) => e.promptText.trim());
-    } catch {
-      /* unreadable */
-    }
-    const real = events.filter((e) => e.tokens && !e.tokens.estimated).length;
-    const unseen = watcher
-      ? events.filter((e) => !watcher.isSeen(e.sessionId, e.turnIndex)).length
-      : events.length;
-    const marker = i === 0 ? '▶' : ' ';
-    lines.push(
-      `${marker} ${s.sessionId.slice(0, 8)} · ${events.length} turns (${real} real) · ${unseen} not-yet-captured · ${timeAgo(
-        s.modifiedMs,
-      )}`,
-    );
-    const last = events[events.length - 1];
-    if (last) {
-      lines.push(`     latest: "${last.promptText.slice(0, 70).replace(/\s+/g, ' ')}"`);
-    }
-  });
-
-  if (hashScope) {
-    let others = 0;
-    try {
-      others = listCopilotSessions(undefined, undefined).filter(
-        (s) => s.workspaceHash !== hashScope,
-      ).length;
-    } catch {
-      /* ignore */
-    }
-    lines.push('', `isolation: ${others} chat(s) in OTHER windows are excluded (scope=window).`);
-  } else {
-    lines.push('', 'isolation: scope=all — capturing the newest chat across ALL windows.');
-  }
-  lines.push(
-    'verdict: capture emits ONLY not-yet-captured turns from the in-scope chats above; it does not replay history.',
-  );
-
-  for (const line of lines) output.appendLine(line);
-  output.show(true);
-}
-
-/**
- * One-click session compaction. Builds a compact recap of the current chat's
- * prompts, copies it to the clipboard, and opens a fresh Copilot chat — so the
- * user drops the re-sent-every-turn history and pastes a lean summary instead.
- */
-async function compactSession(
-  workspaceHash: string | undefined,
-  log: (message: string) => void,
-): Promise<void> {
-  let prompts: string[] = [];
-  try {
-    const active = findActiveSession(undefined, workspaceHash) ?? findActiveSession();
-    if (active) {
-      prompts = readSessionEvents(active)
-        .filter((e) => e.promptText.trim())
-        .map((e) => e.promptText);
-    }
-  } catch {
-    /* fall back to an empty recap */
-  }
-
-  const summary = buildSessionSummary(prompts);
-  await vscode.env.clipboard.writeText(summary);
-
-  // Open a fresh chat via whichever command this VS Code build exposes.
-  let opened = false;
-  for (const cmd of ['workbench.action.chat.newChat', 'workbench.action.chat.new']) {
-    try {
-      await vscode.commands.executeCommand(cmd);
-      opened = true;
-      break;
-    } catch {
-      /* try the next id */
-    }
-  }
-
-  log(`compactSession: recap of ${prompts.length} prompt(s) copied${opened ? ', fresh chat opened' : ''}.`);
-  void vscode.window.showInformationMessage(
-    opened
-      ? 'Fresh chat opened — your session recap is on the clipboard. Paste it to keep context at a fraction of the tokens.'
-      : 'Session recap copied to clipboard. Start a new Copilot chat (＋) and paste it to keep context lean.',
-  );
+function deriveWorkspaceStorageRoot(context: vscode.ExtensionContext): string {
+  // globalStorageUri = .../User/globalStorage/<publisher>.<extension>; deriving
+  // from VS Code itself handles Stable/Insiders, portable data dirs, macOS/Linux,
+  // and remote extension hosts more reliably than hard-coding APPDATA.
+  const globalStorage = context.globalStorageUri?.fsPath;
+  return globalStorage
+    ? path.join(path.dirname(path.dirname(globalStorage)), 'workspaceStorage')
+    : getWorkspaceStorageRoot();
 }

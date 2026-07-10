@@ -18,6 +18,11 @@ export class StatusBar implements vscode.Disposable {
   }
 
   update(state: TamaState): void {
+    if (!state.captureEnabled) {
+      this.item.text = '$(debug-pause) Token Lens';
+      this.item.tooltip = 'Token Lens — capture is off';
+      return;
+    }
     const f = state.forecast;
     if (f && f.loadFraction != null) {
       const pct = Math.round(f.loadFraction * 100);
