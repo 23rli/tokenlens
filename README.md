@@ -22,11 +22,11 @@ GitHub Copilot Chat is the first source adapter. The ledger contract is source-n
 | **Source health** | Which local adapters are working, what do they measure, and which dimensions are unavailable? |
 | **Next-turn forecast** | The predicted input tokens/credits for your next turn, with a calibrated range — and the last **real** turn beside it, clearly labelled, so predicted vs actual is never confused. |
 | **Live accuracy** | The forecaster's own self-measured accuracy on *your* real turns (e.g. `acc 96/100`), so the number is earned, not asserted. |
-| **Context weight** | How heavy the session has become vs. the model's real context limit, with a per-turn growth graph. Observed resets appear as drops; an experimental proximity signal can mark a possible reset zone. |
+| **Context weight** | Context carried in the current chat versus the model limit, with a per-turn growth graph. Sharp drops usually indicate Copilot summarization. |
 | **Where your tokens go** | The system / tool-definitions / history / message split of the current turn — the real cost driver, broken out. |
-| **Total cost** | Selectable workspace / current-chat / today totals in tokens and Copilot credits (AICs), plus dollars when a rate is configured. |
-| **Profiles** | Optional local labels correlate whole requests with selected workflows and toolsets. Profiles never rewrite immutable usage facts. |
-| **Live Copilot data** | The model, reasoning effort, and context window actually in use, read live from the session. |
+| **Usage & cost** | Selectable workspace / current-chat / today totals in tokens and Copilot AI credits, plus projected dollars when a rate is configured. |
+| **Workflows** | Optional request-level attribution using selected workflow and tool evidence. It correlates whole requests and never invents per-tool token totals. |
+| **Current model** | The model, reasoning effort, and context limit recorded for the active chat. |
 
 ## How it works
 
@@ -55,7 +55,7 @@ GitHub Copilot Chat is the first source adapter. The ledger contract is source-n
 
 100% local and read-only. Token Lens never sends prompts, code, or usage anywhere. Turning **Capture off** stops source reads while the already-persisted metadata ledger remains available. Records are retained until clearing the ledger is explicitly confirmed from **Token Lens: Manage data and diagnostics…**.
 
-Profiles are off by default and can be changed without rewriting ledger facts.
+Workflow attribution is off by default and can be changed without rewriting source usage.
 Export is manual, metadata-only, and deliberately secondary. Select **Export all**
 in Overview (or run **Token Lens: Export usage ledger**), choose JSON or
 CSV, and select a local destination. All retained records are exported; nothing
@@ -78,7 +78,7 @@ feature inventory, what has been achieved, and the application's future potentia
 For a concise leadership or pilot pitch, use the
 [Token Lens sales one-pager](docs/TOKEN-LENS-ONE-PAGER.md).
 
-Version 0.8.4 ships one adapter: VS Code GitHub Copilot Chat. Other AI applications are future adapters, not implicit claims of current support.
+Version 0.8.6 ships one adapter: VS Code GitHub Copilot Chat. Other AI applications are future adapters, not implicit claims of current support.
 
 ## Troubleshooting
 

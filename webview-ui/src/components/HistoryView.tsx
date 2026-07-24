@@ -8,31 +8,8 @@ import { fmtNum } from '../format';
  * from the previous turn (a drop = a summarization reset).
  */
 export function HistoryView({ forecast }: { forecast?: ForecastView }) {
-  // Prefer the full turn list (includes just-sent "pending" turns); fall back to
-  // the metered-only series for older payloads.
-  const all = forecast?.allTurns;
-  const series = forecast?.contextSeries ?? [];
-  const prompts = forecast?.turnPrompts ?? [];
-
-  const rows = all
-    ? all.map((t, i) => ({
-        turn: i + 1,
-        prompt: t.prompt || '—',
-        tokens: t.tokens,
-        metered: t.metered,
-        partial: !!t.partial,
-        status: t.status,
-        delta: i > 0 ? t.tokens - all[i - 1].tokens : undefined,
-      }))
-    : series.map((v, i) => ({
-        turn: i + 1,
-        prompt: prompts[i] || '—',
-        tokens: v,
-        metered: true,
-        partial: false,
-        status: 'metered' as const,
-        delta: i > 0 ? v - series[i - 1] : undefined,
-      }));
+  const rows = buildHistoryRows(forecast);
+  const total = forecast?.allTurnsTotal ?? rows.length;
 
   if (rows.length === 0) {
     return <div class="card history-empty muted">No turns captured yet — start a Copilot chat.</div>;
@@ -42,7 +19,9 @@ export function HistoryView({ forecast }: { forecast?: ForecastView }) {
     <section class="card history">
       <div class="history-head">
         <span class="section-title" role="heading" aria-level={2}>Turn history</span>
-        <span class="history-count">{rows.length} turns</span>
+        <span class="history-count">
+          {total > rows.length ? `Latest ${rows.length} of ${total} turns` : `${total} turns`}
+        </span>
       </div>
       <div class="history-list" role="list" aria-label="Copilot turn history">
         {rows
@@ -65,13 +44,13 @@ export function HistoryView({ forecast }: { forecast?: ForecastView }) {
                 <>
                   <span class="history-tokens">{fmtNum(r.tokens)}</span>
                   <span class="history-delta muted">
-                    {r.status === 'input-only' ? 'input measured' : 'output measured'}
+                    {r.status === 'input-only' ? 'input only' : 'output only'}
                   </span>
                 </>
               ) : r.status === 'pending' ? (
                 <>
                   <span class="history-tokens muted">…</span>
-                  <span class="history-delta muted">in flight</span>
+                  <span class="history-delta muted">pending</span>
                 </>
               ) : (
                 <>
@@ -84,4 +63,40 @@ export function HistoryView({ forecast }: { forecast?: ForecastView }) {
       </div>
     </section>
   );
+}
+
+export function buildHistoryRows(forecast?: ForecastView) {
+  // Prefer the full turn list (includes just-sent "pending" turns); fall back to
+  // the metered-only series for older payloads.
+  const all = forecast?.allTurns;
+  const series = forecast?.contextSeries ?? [];
+  const prompts = forecast?.turnPrompts ?? [];
+  const contextStart = forecast?.contextSeriesStartTurn ?? 1;
+
+  return all
+    ? all.map((t, i) => ({
+        turn: t.turn ?? i + 1,
+        prompt: t.prompt || '—',
+        tokens: t.tokens,
+        metered: t.metered,
+        partial: !!t.partial,
+        status: t.status,
+        delta:
+          i > 0 && hasMeasuredInput(t.status) && hasMeasuredInput(all[i - 1].status)
+            ? t.tokens - all[i - 1].tokens
+            : undefined,
+      }))
+    : series.map((v, i) => ({
+      turn: contextStart + i,
+        prompt: prompts[i] || '—',
+        tokens: v,
+        metered: true,
+        partial: false,
+        status: 'metered' as const,
+        delta: i > 0 ? v - series[i - 1] : undefined,
+      }));
+}
+
+function hasMeasuredInput(status: NonNullable<ForecastView['allTurns']>[number]['status']): boolean {
+  return status === 'metered' || status === 'input-only';
 }

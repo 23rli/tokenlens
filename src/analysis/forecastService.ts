@@ -49,9 +49,12 @@ export class ForecastService {
   private lastAbsPctError?: number;
   /** Cap the retained APE window so the score reflects recent behaviour. */
   private readonly maxSamples: number;
+  /** Bound live history so appends stay cheap after very long conversations. */
+  private readonly maxHistory: number;
 
-  constructor(opts: { maxSamples?: number } = {}) {
+  constructor(opts: { maxSamples?: number; maxHistory?: number } = {}) {
     this.maxSamples = opts.maxSamples ?? 200;
+    this.maxHistory = Math.max(1, opts.maxHistory ?? Number.MAX_SAFE_INTEGER);
   }
 
   /** Reset when a new session/conversation begins (history and scoring restart). */
@@ -100,6 +103,7 @@ export class ForecastService {
       promptText: turn.promptText,
       toolCalls: turn.toolCalls,
     });
+    if (this.history.length > this.maxHistory) this.history.shift();
   }
 
   /** Forecast the next turn, optionally conditioned on draft text. */

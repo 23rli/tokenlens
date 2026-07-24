@@ -1,6 +1,6 @@
 # Token Lens — Product Journey, Complete Feature Map & Direction
 
-_Last updated: 2026-07-19 · package version 0.8.4_
+_Last updated: 2026-07-23 · package version 0.8.6_
 
 > **Start with §§11–17 for the shipped product, complete feature inventory,
 > architecture, achievements, boundaries, and future potential.** §§1–10 preserve
@@ -593,7 +593,7 @@ outstanding validation.
 
 ---
 
-## 11. What the exploration became — shipped through 0.8.4
+## 11. What the exploration became — shipped through 0.8.6
 
 The product that survived the evidence is not a token-saving coach. It is a
 **private personal AI usage ledger with a live Copilot instrument panel**:
@@ -608,8 +608,8 @@ The product deliberately separates four things that are often blurred together:
    timestamps, tool metadata, and coverage status.
 2. **Local projections** — configured dollar cost and next-turn forecast, always
    labelled rather than presented as provider billing.
-3. **Optional attribution** — evidence-based Profiles layered onto whole requests;
-   they never rewrite the underlying ledger facts.
+3. **Optional attribution** — evidence-based workflow profiles classify whole requests;
+  they never rewrite source usage.
 4. **Unavailable evidence** — missing source meters are visible as coverage gaps,
    never silently estimated into authoritative totals.
 
@@ -626,14 +626,16 @@ The product deliberately separates four things that are often blurred together:
 | 0.8.2 | Added explicit metering states and corrected request/transcript reconciliation | Stopped completed source gaps from being mislabeled as pending. |
 | 0.8.3 | Added direct Overview export, explicit CSV status, and collapsed cross-chat Recent Activity | Made personal portability discoverable while keeping Overview focused. |
 | 0.8.4 | Captured chat-session-only first turns, improved rebuild coverage/reporting, consolidated commands without hiding useful recovery actions, and removed retired scoring/pet/coaching systems | Made live capture faster, local rebuild more honest, and the extension surface match the current product. |
+| 0.8.5 | Made long-chat and large-history refresh incremental, progressive, cache-safe, and bounded across watcher, forecast, aggregate, ledger, and webview paths | Removed the 70–100-chat startup/freeze failure mode while preserving exact totals, source recovery, compaction identity, and visible loading truth. |
+| 0.8.6 | Rewrote UI terminology, exposed missing states, renamed Profiles to Workflows, consolidated the visual system, and added narrow/high-contrast/accessibility coverage | Made the product easier to understand without weakening any measurement boundary or local-first privacy claim. |
 
 ### 11.2 What is core, secondary, and advanced
 
 - **Core:** Live, Overview, Turns, capture privacy control, measured units,
   coverage, source health, and the local ledger.
-- **Useful secondary:** calibrated forecast interval/accuracy, experimental reset-zone indicator,
+- **Useful secondary:** calibrated forecast range/error, experimental context-limit warning,
   pin/unpin, configured cost basis, Recent Activity, and manual export.
-- **Advanced:** Profiles, custom tool groups, external allocation rates, rebuild,
+- **Advanced:** Workflows, custom tool groups, configured tool-cost rates, rebuild,
   clear, diagnostics, and self-test.
 - **Deferred:** cloud sync, managed team views, a second application adapter,
   exact per-MCP usage, invoice reconciliation, and automated chargeback.
@@ -652,13 +654,13 @@ can truthfully claim.
 | Last metered input | Shows the latest completed input-token measurement. | Requires source-written input metering. |
 | Next-turn forecast | Predicts next input tokens with a calibrated range, confidence, and optional AIC estimate. | Pure local arithmetic; a forecast, not provider metering. |
 | In-flight estimate | Temporarily targets one genuinely current unmatched request. | Completed requests with no meter become unavailable, not pending. |
-| Forecast accuracy | Scores prior predictions against real measured turns. | Only appears when measured samples exist. |
-| Reset-zone indicator | Marks model-relative proximity where summarization may occur. | Experimental: current corpus recall/precision are poor; never present it as reliable reset prediction. |
+| Forecast error | Shows median absolute error and range coverage across prior measured turns. | Only appears when measured samples exist. |
+| Context-limit warning | Marks model-relative proximity where summarization may occur. | Experimental: current corpus recall/precision are poor; never present it as reliable timing prediction. |
 | Context weight | Shows current carried context against the source-reported model limit. | Fully metered input is required. |
 | Context trend | Shows per-turn growth and summarization drops. | Uses active-chat measurements; it is not durable prompt history. |
-| Where tokens go | Shows source-reported system, tool, history, message, and file categories for this prompt, this chat, and all chats in scope. | Categories are request-level aggregates, not exact individual-tool splits. |
-| Total cost | Switches among workspace, active chat, and today for measured tokens, Copilot AICs, and configured USD. | USD is a local projection; incomplete inputs are labelled measured/known. |
-| Live Copilot data | Shows model and reasoning effort when recorded. | Blank means the source did not record it. |
+| Where tokens go | Shows source-reported system, tool, history, message, and file categories for the latest turn, this chat, and all chats in scope. | Categories are request-level aggregates, not exact individual-tool splits. |
+| Usage & cost | Switches among workspace, active chat, and today for tokens, Copilot AI credits, and configured USD. | USD is a local projection; incomplete inputs are labelled known. |
+| Current model | Shows model, reasoning effort, and context limit when recorded. | Missing fields remain unknown. |
 | Capture state | Shows live/stale/paused state and lets the user stop automatic source reads. | Existing ledger data remains readable when capture is off. |
 
 ### 12.2 Overview — durable personal accounting
@@ -667,8 +669,8 @@ can truthfully claim.
 | --- | --- | --- |
 | Time scopes | Today, 7 days, 30 days, and All. | Local calendar windows over retained records. |
 | Personal totals | Measured input/output/total tokens, native AICs, and configured USD. | Totals include only independently measured directions. |
-| Explicit coverage | Separates fully metered, input-only, output-only, in-flight, and unavailable requests. | Missing evidence remains visible rather than being invented. |
-| Applications | Ranks source applications by known tokens/cost. | GitHub Copilot Chat is the only adapter in 0.8.4. |
+| Explicit coverage | Separates fully metered, input-only, output-only, pending, and unavailable requests. | Missing evidence remains visible rather than being invented. |
+| Applications | Ranks source applications by known tokens/cost. | GitHub Copilot Chat is the only adapter in 0.8.6. |
 | Providers and models | Shows provider/model drivers when source metadata exists. | Unknown source fields remain unknown. |
 | Projects | Uses a pseudonymous key plus local folder/workspace alias. | Raw workspace paths are not persisted. |
 | Source health | Shows adapter readiness, chat count, and capabilities such as token/per-tool metering. | Capability flags prevent unsupported claims. |
@@ -681,29 +683,28 @@ can truthfully claim.
 - Newest-first transient turn list.
 - Turn number and prompt excerpt for orientation.
 - Fully metered token value and change from the previous turn.
-- Explicit **input measured**, **output measured**, **in flight**, or **usage
+- Explicit **input only**, **output only**, **pending**, or **usage
   unavailable** status when full metering is absent.
 - Summarization drops remain visible as negative deltas.
 - Prompt excerpts are held in memory from the active source. They are never
   written to the durable ledger or export.
 
-### 12.4 Profiles — optional workflow and tool attribution
+### 12.4 Workflows — optional request attribution
 
 - Off by default and independent of core ledger capture.
 - Built-in **FD&E HQ** and **All MCP tools** groups.
 - Schema-validated custom groups based on workflow names and service identifiers;
   user regular expressions are not executed.
 - Workspace, active-chat, and today scopes.
-- Request-level buckets are mutually exclusive: explicit workflow (high
-  confidence), selected-tool associated (medium), mixed selected groups (low),
-  and Other Copilot (unattributed).
+- Request-level buckets are mutually exclusive: explicit workflow, selected-tool
+  match, multiple selected profiles, and no profile match.
 - Whole-request measured tokens/cost, turn count, MCP call count, and share of
   known spend per bucket.
 - Service call count, success/failure, observed duration, and optional configured
   per-call/per-minute allocation.
-- Workflow envelope combining measured Copilot cost and known configured external
-  allocation.
-- Profiles correlate evidence; they do not prove causal per-tool spend and cannot
+- Known workflow totals combine request-level Copilot cost with configured tool-cost
+  estimates.
+- Workflow profiles correlate evidence; they do not prove causal per-tool spend and cannot
   split request tokens among individual MCP calls.
 
 ### 12.5 Info — in-product measurement contract
@@ -739,7 +740,7 @@ aliases for existing keybindings and automation.
 | `tokenlens.capture.scope` | `window` | Keep normal Live capture isolated or deliberately follow all windows. |
 | `tokenlens.impact.usdPerMillionTokens` | `0.58` | Local blended USD projection per million measured tokens. |
 | `tokenlens.impact.usdPerCredit` | `0` | AIC-rate fallback when the token rate is disabled. |
-| `tokenlens.businessTools.enabled` | `false` | Enable optional Profiles. |
+| `tokenlens.businessTools.enabled` | `false` | Enable optional workflow attribution. |
 | `tokenlens.businessTools.enabledGroups` | `[]` | Select built-in/custom groups. |
 | `tokenlens.businessTools.customGroups` | `{}` | Define reusable workflow/service match groups. |
 | `tokenlens.businessTools.rates` | `{}` | Define optional external allocation assumptions. |
@@ -756,7 +757,7 @@ VS Code Copilot local files (read-only)
   → content-free UsageObservation revisions
   → append-only monthly local JSONL partitions
   → deduplication + materialization
-  → Overview queries / Profiles / manual JSON or CSV export
+  → Overview queries / Workflows / manual JSON or CSV export
 
 The active PromptEvent also drives Live and Turns without entering the ledger.
 ```
@@ -826,11 +827,11 @@ the same fidelity.
 | Outcomes/adoption loop | Prove coaching reduces retries net of its own cost. | Correct evaluation idea, but depended on a coaching product whose value was too small. | Removed from runtime; outcome-based evaluation remains a future principle. |
 | Tool trimming | Disable bloated/unused tool definitions re-sent every turn. | Theoretically capability-safe for truly unused servers, but highly user/config dependent; built-in tools are functional, not waste. | Potential niche advisory, not core. |
 | Pre-send context-load optimizer | More specific prompts would cause less exploration/context loading. | Two probes found wording had near-zero relation to tokens; discovery was only about 10–12% of tool calls and users named target files only about 3% of file-touching turns. | Rejected before UI build. |
-| Org/FinOps dashboard | Aggregate structural AI spend by team/repository/workflow. | Potentially valuable, but GitHub owns much org usage/billing data and a central product raises governance/platform risk. | Conditional future, not local 0.8.4. |
+| Org/FinOps dashboard | Aggregate structural AI spend by team/repository/workflow. | Potentially valuable, but GitHub owns much org usage/billing data and a central product raises governance/platform risk. | Conditional future, not local 0.8.6. |
 | Live visibility | Developers need a running meter, context view, and per-turn evidence while working. | Survived every probe because it is descriptive, useful without behavior change, and absent from the normal Copilot UX. | Shipped core. |
 | Precognition | Recent measured structure can forecast the next turn. | About 3–4% median error on tested steady data; calibrated interval handles volatility honestly at zero model-token cost. | Shipped core. |
-| Business-tool/FD&E attribution | Whole-request usage plus tool/workflow evidence can evaluate business-tool envelopes. | Feasible at request/workflow level; impossible to claim exact per-MCP tokens from current source events. | Shipped as optional Profiles with explicit boundaries. |
-| Custom Profiles | Microsoft-specific toolsets should be configurable rather than hard-coded. | Built-in FD&E HQ could be generalized into selected/custom groups without changing immutable facts. | Shipped advanced feature. |
+| Business-tool/FD&E attribution | Whole-request usage plus tool/workflow evidence can evaluate attributed workflows. | Feasible at request/workflow level; impossible to claim exact per-MCP tokens from current source events. | Shipped as optional Workflows with explicit boundaries. |
+| Custom workflows | Microsoft-specific toolsets should be configurable rather than hard-coded. | Built-in FD&E HQ could be generalized into selected/custom groups without rewriting source usage. | Shipped advanced feature. |
 | Local personal ledger | Durable cross-chat accounting can outlive the active Copilot view and support more applications later. | Source-neutral contract, revisions, deduplication, privacy projection, queries, and export all validated locally. | Shipped product foundation. |
 
 The repeated lesson is consistent: **do not sell control where only observation is
@@ -846,7 +847,7 @@ first-class field.
 - Preserved the differentiated live forecast while removing runtime features that
   could not support their claims.
 - Expanded from one active chat to a durable, local, source-neutral personal ledger.
-- Made Microsoft/FD&E use cases optional Profiles instead of product-wide assumptions.
+- Made Microsoft/FD&E use cases optional Workflows instead of product-wide assumptions.
 - Added user-controlled data portability without adding an account, service, or
   automatic upload.
 
@@ -885,12 +886,12 @@ accuracy guarantee.
 - Synthetic ledger benchmark: 100,000 observations / 50,000 logical records;
   materialization and warm Overview query remained comfortably sub-second on the
   measured development machine.
-- The 0.8.4 release candidate passes strict TypeScript checking, production bundle
+- The 0.8.6 release candidate passes strict TypeScript checking, production bundle
   activation smoke testing, and 138 tests across extension-host and webview logic.
 - Test coverage includes parsers, reconciliation, token provenance, cost, forecast,
   attribution, canonicalization, validation, persistence, retention, materialization,
   query coverage, export privacy, and UI pending classification.
-- Visual preview checks cover narrow-sidebar Live, Overview, Turns, Profiles, and Info
+- Visual preview checks cover narrow-sidebar Live, Overview, Turns, Workflows, and Info
   behavior with explicit status fixtures.
 
 ### 15.5 Privacy and trust outcomes
@@ -931,8 +932,8 @@ GenAI telemetry. Adapter value depends on the source data, not parser effort alo
 
 ### 16.3 Business-tool and Microsoft potential
 
-- Reusable organization-specific Profiles without product forks.
-- Compare known workflow cost envelopes, service participation, reliability, and
+- Reusable organization-specific workflow profiles without product forks.
+- Compare attributed workflow usage, configured tool cost, service participation, reliability, and
   duration for repeated business outcomes.
 - Join exported metadata with governed external outcome data outside Token Lens.
 - Add provider-native service charges when an authoritative source emits them.
@@ -980,7 +981,7 @@ These become legitimate only if a source starts emitting the required fields:
 4. **Local by default.** Reading, retention, and export remain user controlled.
 5. **No content ledger.** Durable accounting does not require prompts, responses,
    code, documents, arguments, or raw paths.
-6. **No causal attribution without causal evidence.** Profiles label whole requests
+6. **No causal attribution without causal evidence.** Workflow profiles label whole requests
    from observable signals.
 7. **No individual performance ranking.** Usage is not productivity or quality.
 8. **Validate before UI.** The rejected context optimizer demonstrates why probes
@@ -1012,7 +1013,7 @@ invoice it cannot observe, or tell a developer how productive they are.
 - [FEATURES.md](FEATURES.md) — concise current feature reference.
 - [LOCAL-LEDGER.md](LOCAL-LEDGER.md) — durable contract, storage, revisions,
   query, export, adapter, and performance specification.
-- [BUSINESS-TOOLS.md](BUSINESS-TOOLS.md) — Profiles, FD&E HQ, attribution
+- [BUSINESS-TOOLS.md](BUSINESS-TOOLS.md) — Workflows, FD&E HQ, attribution
   boundaries, custom groups, and configured allocations.
 - [KNOWN-ISSUES.md](KNOWN-ISSUES.md) — current source limitations and workarounds.
 - [PITCH-FEATURE-AUDIT.md](https://github.com/t-richarli_microsoft/tokentama/blob/main/docs/PITCH-FEATURE-AUDIT.md) — what to lead with, defer,

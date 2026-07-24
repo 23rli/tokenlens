@@ -2,6 +2,87 @@
 
 All notable changes to the Token Lens extension are documented here.
 
+## [Unreleased]
+
+## [0.8.6] - 2026-07-23
+
+### Changed
+
+- Reworked visible language around input forecasts, historical median error,
+  context summarization, known token minima, AI credits, projected dollars, and
+  source coverage so measured, estimated, partial, and unavailable values cannot
+  be confused.
+- Renamed **Profiles** to **Workflows** and replaced accounting jargon with
+  plain request-level attribution language and an explicit non-causal boundary.
+- Rebuilt the visual system as one native VS Code, number-forward stylesheet;
+  cards, scopes, tables, errors, loading, and empty states now share one hierarchy.
+- Kept the five-tab header on one row at every supported sidebar width, giving
+  longer labels proportionally more room instead of wrapping or truncating them.
+
+### Fixed
+
+- Show paused capture, progressive all-chat loading, and local-ledger refresh
+  failures as distinct visible states instead of stale or indefinite UI.
+- Preserve full turn counts in bounded history headers and avoid comparing
+  output-only token values with measured input deltas.
+- Corrected the model card's **Agent** label, context-limit unknown state,
+  local-day scope descriptions, and source readiness wording.
+- Added narrow-width layouts, stable scrollbar space, reduced-motion handling,
+  forced-colors/high-contrast support, focus-visible navigation, accessible help
+  descriptions, long-label truncation, and zero-token/real-credit rendering.
+
+### Removed
+
+- Removed the retired tamagotchi, scoring, coaching, compose, sustainability,
+  and multi-era override CSS. The shipped webview stylesheet is 57% smaller and
+  now covers only live product components.
+
+## [0.8.5] - 2026-07-23
+
+### Fixed
+
+- Deduplicate live Copilot turns by stable source request identity instead of
+  mutable turn indexes, so post-compaction requests are not skipped when Copilot
+  renumbers the conversation.
+- Keep bounded forecast state between source changes and append only newly
+  metered turns. Earlier-turn revisions and compaction still trigger a safe
+  rebuild.
+- Make unchanged timer/focus/view refreshes no-ops and reuse a just-parsed source
+  snapshot, preventing 70–100+ turn chats from repeatedly blocking the extension
+  host.
+- Cache content-free per-session workspace and ledger rollups, so one changed
+  chat no longer reparses every unchanged conversation in scope.
+- Decode each changed Copilot chat-session JSONL source once and share the parsed
+  records across request and metering extraction.
+- Replace nested forecast calibration prefix rescans with an exact single-pass
+  running-median calculation.
+- Baseline watcher history from source metadata instead of parsing every old
+  chat during activation, then wake Live and the durable ledger without replaying
+  historical capture events.
+- Fill whole-scope totals progressively and active-chat-first, explicitly label
+  partial progress, and back off retries when a source is temporarily unreadable.
+- Use per-file source signatures and retry incomplete reads without poisoning
+  parser, rollup, or ledger-projection caches.
+- Keep a bounded 30-second strong MRU over the weak parsed-snapshot cache so the
+  active chat survives cold handoffs and memory pressure without retaining all
+  prompt-bearing history.
+- Cache unchanged ledger materialization while detecting independent writer
+  partitions and workspace-metadata changes.
+- Bound transient turn-history and context-graph payloads to 500 rows while
+  preserving their original turn numbers and full source totals.
+- Paint the current dashboard state before deferred source refresh work and
+  cancel pending refreshes when the view is disposed.
+
+### Added
+
+- A repeatable 10/50/100/200-turn live forecast-history regression benchmark
+  covering cold rebuild, unchanged refresh, and one-turn append latency.
+- A content-safe local benchmark for cold parsing, cached reads, and forecast
+  reconstruction on the ten largest real Copilot session sources available.
+- Regression coverage for progressive rollups, source-read recovery, watcher
+  startup, multi-writer ledger invalidation, bounded webview history, and view
+  refresh lifecycle.
+
 ## [0.8.4] - 2026-07-19
 
 ### Changed

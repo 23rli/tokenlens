@@ -2,16 +2,22 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { TokenLensStore } from './state/tokenLensStore';
 import { CopilotWatcher } from './capture/CopilotWatcher';
-import { getWorkspaceStorageRoot, listCopilotSessions } from './capture/copilotPaths';
+import {
+  copilotSessionProjectionSignature,
+  copilotSessionSourceSignature,
+  getWorkspaceStorageRoot,
+  listCopilotSessions,
+} from './capture/copilotPaths';
 import {
   normalizeCaptureScope,
   scopeHash,
   selectSessionsInScope,
 } from './capture/sessionScope';
-import { readSessionEvents, readSessionTitle } from './capture/copilotReader';
+import { readSessionEvents, readSessionSnapshot } from './capture/copilotReader';
+import { copilotEventIdentity } from './capture/copilotEventIdentity';
 import { StatusBar } from './status/statusBar';
 import { DashboardViewProvider } from './webview/DashboardViewProvider';
-import { ForecastService } from './analysis/forecastService';
+import { ForecastHistoryCache } from './analysis/forecastHistoryCache';
 import { buildForecastView } from './analysis/forecastView';
 import {
   configuredCostUsd,
@@ -24,6 +30,11 @@ import {
   summarizeBusinessActivity,
 } from './analysis/businessActivity';
 import { createBusinessToolRegistry } from './analysis/businessToolGroups';
+import {
+  mergeSessionRollupBusiness,
+  SessionRollupCache,
+} from './analysis/sessionRollups';
+import { buildLiveHistory } from './analysis/liveHistory';
 import { LocalUsageLedger } from './ledger/LocalUsageLedger';
 import { buildPersonalLedgerOverview } from './ledger/query';
 import { buildLedgerCsvExport, buildLedgerJsonExport } from './ledger/export';
@@ -35,7 +46,6 @@ import {
 import { CopilotUsageAdapter } from './sources/copilot/CopilotUsageAdapter';
 import type { ForecastView } from './webview/contract';
 import type {
-  PromptEvent,
   ContextSlice,
   BusinessActivitySummary,
   UsageSourceHealth,
@@ -43,6 +53,8 @@ import type {
 
 const FORECAST_HISTORY_LIMIT = 200;
 const LEDGER_CLEARED_BEFORE_KEY = 'tokenlens.ledger.clearedBefore';
+const ROLLUP_REFRESH_BUDGET_MS = 25;
+const SOURCE_RETRY_DELAY_MS = 1_000;
 
 export function activate(context: vscode.ExtensionContext): void {
   const store = new TokenLensStore();
@@ -82,6 +94,10 @@ export function activate(context: vscode.ExtensionContext): void {
   let ledgerSourceSignature = '';
   let ledgerSyncInFlight: Promise<void> | undefined;
   let lastLedgerError: string | undefined;
+  let lastLedgerSnapshot:
+    | Awaited<ReturnType<LocalUsageLedger['materialize']>>
+    | undefined;
+  let lastLedgerViewSignature: string | undefined;
   log(
     workspaceHash
       ? `Capture scoped to this window's workspace storage (${workspaceHash}).`
@@ -107,7 +123,7 @@ export function activate(context: vscode.ExtensionContext): void {
           ? listCopilotSessions(workspaceStorageRoot)
           : ledgerSessionsInScope();
         const signature = `${scanAllLocal ? 'all-local' : 'live-scope'}|${sessions
-          .map((session) => `${session.workspaceHash}/${session.sessionId}:${session.modifiedMs}`)
+          .map((session) => `${session.workspaceHash}/${session.sessionId}:${copilotSessionProjectionSignature(session)}`)
           .join('|')}`;
         if (forceScan || signature !== ledgerSourceSignature) {
           const scan = await copilotAdapter.scan(sessions);
@@ -115,7 +131,9 @@ export function activate(context: vscode.ExtensionContext): void {
           const eligible = observationsAfterClearWatermark(scan.observations, clearedBefore);
           const appended = await usageLedger.append(eligible);
           sourceHealth = [scan.health];
-          ledgerSourceSignature = signature;
+          // A partial scan must not suppress retries just because source metadata
+          // stayed stable after a transient sharing/remote-host read failure.
+          ledgerSourceSignature = scan.health.status === 'error' ? '' : signature;
           if (forceScan || scanAllLocal) {
             log(`ledger: scanned ${sessions.length} local session file${sessions.length === 1 ? '' : 's'} and projected ${scan.observations.length} usage record${scan.observations.length === 1 ? '' : 's'}.`);
           }
@@ -131,18 +149,37 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       const snapshot = await usageLedger.materialize();
       const clearedBefore = context.globalState.get<string>(LEDGER_CLEARED_BEFORE_KEY);
+      const impact = vscode.workspace.getConfiguration('tokenlens.impact');
+      const usdPerMillionTokens = impact.get<number>('usdPerMillionTokens', 0.58);
+      const usdPerCredit = impact.get<number>('usdPerCredit', 0);
+      const ledgerViewSignature = JSON.stringify({
+        clearedBefore,
+        day: new Date().toDateString(),
+        usdPerMillionTokens,
+        usdPerCredit,
+        sourceHealth,
+      });
+      if (
+        snapshot === lastLedgerSnapshot &&
+        ledgerViewSignature === lastLedgerViewSignature
+      ) {
+        store.setPersonalLedgerError(undefined);
+        lastLedgerError = undefined;
+        return;
+      }
       const visibleRecords = materializedRecordsAfterClearWatermark(snapshot.records, clearedBefore);
       const visibleDiagnostics = visibleLedgerDiagnostics(snapshot.diagnostics, visibleRecords);
-      const impact = vscode.workspace.getConfiguration('tokenlens.impact');
       store.setPersonalLedger(buildPersonalLedgerOverview(
         visibleRecords,
         visibleDiagnostics,
         sourceHealth,
         {
-          usdPerMillionTokens: impact.get<number>('usdPerMillionTokens', 0.58),
-          usdPerCredit: impact.get<number>('usdPerCredit', 0),
+          usdPerMillionTokens,
+          usdPerCredit,
         },
       ));
+      lastLedgerSnapshot = snapshot;
+      lastLedgerViewSignature = ledgerViewSignature;
       lastLedgerError = undefined;
     })()
       .catch((error) => {
@@ -151,6 +188,9 @@ export function activate(context: vscode.ExtensionContext): void {
           log(`Ledger sync failed: ${detail}`);
           lastLedgerError = detail;
         }
+        store.setPersonalLedgerError(
+          'Could not refresh saved usage. Retry from Manage or inspect ledger health.',
+        );
       })
       .finally(() => {
         ledgerSyncInFlight = undefined;
@@ -162,8 +202,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // (which carries real metered tokens for every completed turn), so it appears
   // immediately and never depends on lagging forward-only capture. Model-agnostic
   // and free (pure arithmetic). Refreshed on each capture event + on a timer.
-  // Cache the (expensive) whole-chat aggregate so the 5s timer only re-reads every
-  // conversation when something on disk actually changed.
+  // Cache the whole-scope aggregate and each content-free session rollup so a
+  // changed active chat never forces unchanged conversations to be reparsed.
   let chatAggCache:
     | {
         signature: string;
@@ -182,14 +222,38 @@ export function activate(context: vscode.ExtensionContext): void {
         todayCreditsEstimated: boolean;
         businessWorkspace: BusinessActivitySummary;
         businessToday: BusinessActivitySummary;
+        complete: boolean;
+        processedSessionCount: number;
+        totalSessionCount: number;
+        continuationDelayMs: number;
       }
     | undefined;
+  const sessionRollupCache = new SessionRollupCache();
   let lastRefreshError: string | undefined;
+  let lastForecastRefreshSignature: string | undefined;
+  const forecastHistory = new ForecastHistoryCache({
+    historyLimit: FORECAST_HISTORY_LIMIT,
+    maxSamples: FORECAST_HISTORY_LIMIT,
+  });
+  let heartbeatLiveView: (() => void) | undefined;
+  let aggregateContinuation: ReturnType<typeof setTimeout> | undefined;
+  const cancelAggregateContinuation = (): void => {
+    if (aggregateContinuation) clearTimeout(aggregateContinuation);
+    aggregateContinuation = undefined;
+  };
+  const scheduleAggregateContinuation = (delayMs: number): void => {
+    if (aggregateContinuation || !store.captureEnabled) return;
+    aggregateContinuation = setTimeout(() => {
+      aggregateContinuation = undefined;
+      refreshForecast();
+    }, delayMs);
+  };
   const refreshForecast = (): void => {
     // The capture toggle is a privacy boundary, not just a watcher preference.
     // When off, no timer/focus/view refresh may read Copilot's files.
     if (!store.captureEnabled) return;
     try {
+      const refreshStartedAt = Date.now();
       const scope = normalizeCaptureScope(
         vscode.workspace.getConfiguration('tokenlens.capture').get('scope', 'window'),
       );
@@ -199,14 +263,66 @@ export function activate(context: vscode.ExtensionContext): void {
         listCopilotSessions(workspaceStorageRoot, scopeHash(scope, workspaceHash)),
         { scope, workspaceHash, activatedAt, pinnedSessionId: getPinnedSessionId() },
       );
-      if (!session) {
-        chatAggCache = undefined;
-        store.clearForecast();
+      const sessionSignature = allSessions
+        .map((candidate) => `${candidate.workspaceHash}/${candidate.sessionId}:${copilotSessionSourceSignature(candidate)}`)
+        .join('|');
+      const todayKey = new Date().toDateString();
+      const impact = vscode.workspace.getConfiguration('tokenlens.impact');
+      const usdPerMillionTokens = impact.get<number>('usdPerMillionTokens', 0.58);
+      const usdPerCredit = impact.get<number>('usdPerCredit', 0);
+      const businessConfig = vscode.workspace.getConfiguration('tokenlens.businessTools');
+      const businessRates = sanitizeBusinessToolRates(businessConfig.get('rates', {}));
+      const businessRegistry = createBusinessToolRegistry(
+        businessConfig.get('enabled', false),
+        businessConfig.get('enabledGroups', []),
+        businessConfig.get('customGroups', {}),
+      );
+      const businessConfigSignature = JSON.stringify({
+        rates: businessRates,
+        registry: businessRegistry.signature,
+      });
+      const refreshSignature = JSON.stringify({
+        scope,
+        active: session ? `${session.workspaceHash}/${session.sessionId}` : undefined,
+        sessions: sessionSignature,
+        day: todayKey,
+        usdPerMillionTokens,
+        usdPerCredit,
+        business: businessConfigSignature,
+      });
+      // Timers, focus, watcher, and webview visibility can all queue the same
+      // refresh. Once the source/config/day signature is rendered, do no more
+      // synchronous parsing, forecasting, or full-state webview updates.
+      if (refreshSignature === lastForecastRefreshSignature && chatAggCache?.complete) {
+        heartbeatLiveView?.();
         return;
       }
-      const events = readSessionEvents(session);
-      if (events.length === 0) {
+      if (!session) {
+        cancelAggregateContinuation();
+        chatAggCache = undefined;
+        sessionRollupCache.clear();
+        forecastHistory.clear();
         store.clearForecast();
+        lastForecastRefreshSignature = refreshSignature;
+        return;
+      }
+      const {
+        events,
+        title: sessionTitle,
+        complete: activeSourceComplete,
+      } = readSessionSnapshot(session);
+      if (events.length === 0) {
+        if (!activeSourceComplete) {
+          lastForecastRefreshSignature = undefined;
+          scheduleAggregateContinuation(SOURCE_RETRY_DELAY_MS);
+          return;
+        }
+        cancelAggregateContinuation();
+        chatAggCache = undefined;
+        sessionRollupCache.clear();
+        forecastHistory.clear();
+        store.clearForecast();
+        lastForecastRefreshSignature = refreshSignature;
         return;
       }
       // Metered turns drive the forecast HISTORY; the newest turn overall is the
@@ -222,35 +338,25 @@ export function activate(context: vscode.ExtensionContext): void {
       const current = events[events.length - 1];
       const lastReal = real.length ? real[real.length - 1] : undefined;
       const currentIsPending = current.meteringStatus === 'pending';
-      // Every user turn (metered or not) for the History list — so a just-sent turn
-      // shows up immediately as "pending" and fills in once Copilot meters it.
-      const allTurns = events
-        .filter((e) => e.promptText.trim())
-        .map((e) => {
-          const parts = meteredTokenParts(e.tokens);
-          return {
-            prompt: e.promptText.replace(/\s+/g, ' ').trim().slice(0, 70),
-            tokens: parts.inputMetered ? parts.input : parts.output,
-            metered: parts.fullyMetered,
-            partial: parts.partial,
-            status: e.meteringStatus ?? (parts.fullyMetered ? 'metered' : parts.inputMetered ? 'input-only' : parts.outputMetered ? 'output-only' : 'unavailable'),
-          };
-        });
+      // Bound the transient webview payload/DOM while preserving true totals and
+      // turn numbers. Forecasting and aggregate math still use all source rows.
+      const liveHistory = buildLiveHistory(events, real);
 
-      const fs = new ForecastService();
-      // Replaying accuracy is intentionally quadratic in the calibration window;
-      // cap it so pathological multi-thousand-turn chats cannot stall the host.
-      for (const e of real.slice(-FORECAST_HISTORY_LIMIT)) {
-        fs.recordTurn(
-          {
-            promptTokens: e.tokens!.inputTokens,
-            completionTokens: e.tokens!.outputTokens,
-            promptText: e.promptText,
-            toolCalls: e.toolCalls?.length,
+      const forecastHistoryUpdate = forecastHistory.update(
+        `${session.workspaceHash}/${session.sessionId}`,
+        real.map((event) => ({
+          id: copilotEventIdentity(event, session.workspaceHash).primary,
+          promptTokens: event.tokens!.inputTokens,
+          completionTokens: event.tokens!.outputTokens,
+          promptText: event.promptText,
+          toolCalls: event.toolCalls?.length,
+          model: {
+            maxInputTokens: event.model?.maxInputTokens,
+            contextMaxTokens: event.model?.contextMaxTokens,
           },
-          { maxInputTokens: e.model?.maxInputTokens, contextMaxTokens: e.model?.contextMaxTokens },
-        );
-      }
+        })),
+      );
+      const fs = forecastHistoryUpdate.service;
       // While a turn is in flight, estimate that known prompt honestly. Once it
       // is metered, switch back to a true next-turn structural forecast.
       const forecastTarget: ForecastView['forecastTarget'] = currentIsPending
@@ -286,32 +392,11 @@ export function activate(context: vscode.ExtensionContext): void {
         tokens: s.tokens,
         pct: sessionInputTokens > 0 ? Math.round((s.tokens / sessionInputTokens) * 100) : 0,
       }));
-      const usdPerMillionTokens = vscode.workspace
-        .getConfiguration('tokenlens.impact')
-        .get<number>('usdPerMillionTokens', 0.58);
-      const usdPerCredit = vscode.workspace
-        .getConfiguration('tokenlens.impact')
-        .get<number>('usdPerCredit', 0);
-      const businessConfig = vscode.workspace.getConfiguration('tokenlens.businessTools');
-      const businessRates = sanitizeBusinessToolRates(businessConfig.get('rates', {}));
-      const businessRegistry = createBusinessToolRegistry(
-        businessConfig.get('enabled', false),
-        businessConfig.get('enabledGroups', []),
-        businessConfig.get('customGroups', {}),
-      );
-      const businessConfigSignature = JSON.stringify({
-        rates: businessRates,
-        registry: businessRegistry.signature,
-      });
       const businessCostOptions = { usdPerMillionTokens, usdPerCredit };
       // Whole-chat breakdown: aggregate every conversation in scope (this window)
       // so the split reflects total spend and doesn't reset when a new chat starts.
-      const sessionSignature = allSessions
-        .map((s) => `${s.workspaceHash}/${s.sessionId}:${s.modifiedMs}`)
-        .join('|');
       // 'Today' = turns whose real timestamp falls on the local calendar day; the
       // day key invalidates the cache at midnight so the figure rolls over.
-      const todayKey = new Date().toDateString();
       const startOfToday = new Date();
       startOfToday.setHours(0, 0, 0, 0);
       const todayMs = startOfToday.getTime();
@@ -322,11 +407,10 @@ export function activate(context: vscode.ExtensionContext): void {
         !chatAggCache ||
         chatAggCache.signature !== sessionSignature ||
         chatAggCache.day !== todayKey ||
-        chatAggCache.businessConfigSignature !== businessConfigSignature
+        chatAggCache.businessConfigSignature !== businessConfigSignature ||
+        !chatAggCache.complete
       ) {
         const chatAgg = new Map<string, { category: string; label: string; tokens: number }>();
-        const businessEvents: PromptEvent[] = [];
-        const todayBusinessEvents: PromptEvent[] = [];
         let chatInput = 0;
         let chatOutput = 0;
         let chatTokensPartial = false;
@@ -337,38 +421,44 @@ export function activate(context: vscode.ExtensionContext): void {
         let todayTokensPartial = false;
         let todayCredits = 0;
         let todayCreditsEstimated = false;
-        for (const s of allSessions) {
-          const evs = s.sessionId === session.sessionId ? events : readSessionEvents(s);
-          for (const e of evs) {
-            businessEvents.push(e);
-            const eventMs = e.timestamp ? Date.parse(e.timestamp) : NaN;
-            if (!Number.isNaN(eventMs) && eventMs >= todayMs && eventMs < tomorrowMs) {
-              todayBusinessEvents.push(e);
-            }
-            const t = e.tokens;
-            const parts = meteredTokenParts(t);
-            if (!parts.anyMetered) continue;
-            chatInput += parts.input;
-            chatOutput += parts.output;
-            chatTokensPartial ||= parts.partial;
-            const credit = creditAmountForMeteredUsage(t);
-            chatCredits += credit.value;
-            chatCreditsEstimated ||= credit.estimated;
-            const ts = e.timestamp ? Date.parse(e.timestamp) : NaN;
-            if (!Number.isNaN(ts) && ts >= todayMs && ts < tomorrowMs) {
-              todayInput += parts.input;
-              todayOutput += parts.output;
-              todayTokensPartial ||= parts.partial;
-              todayCredits += credit.value;
-              todayCreditsEstimated ||= credit.estimated;
-            }
-            for (const sl of parts.inputMetered ? t?.contextBreakdown ?? [] : []) {
-              const cur3 = chatAgg.get(sl.label) ?? { category: sl.category, label: sl.label, tokens: 0 };
-              cur3.tokens += sl.tokens;
-              chatAgg.set(sl.label, cur3);
-            }
+        const rollupRefresh = sessionRollupCache.refresh({
+          sessions: allSessions,
+          active: session,
+          activeEvents: events,
+          activeComplete: activeSourceComplete,
+          dayKey: todayKey,
+          todayMs,
+          tomorrowMs,
+          businessConfigSignature,
+          rates: businessRates,
+          costs: businessCostOptions,
+          registry: businessRegistry,
+          budgetMs: ROLLUP_REFRESH_BUDGET_MS,
+          startedAt: refreshStartedAt,
+        });
+        const { rollups } = rollupRefresh;
+        for (const rollup of rollups) {
+          chatInput += rollup.input;
+          chatOutput += rollup.output;
+          chatTokensPartial ||= rollup.tokensPartial;
+          chatCredits += rollup.credits;
+          chatCreditsEstimated ||= rollup.creditsEstimated;
+          todayInput += rollup.todayInput;
+          todayOutput += rollup.todayOutput;
+          todayTokensPartial ||= rollup.todayTokensPartial;
+          todayCredits += rollup.todayCredits;
+          todayCreditsEstimated ||= rollup.todayCreditsEstimated;
+          for (const slice of rollup.breakdown) {
+            const currentSlice = chatAgg.get(slice.label) ?? {
+              category: slice.category,
+              label: slice.label,
+              tokens: 0,
+            };
+            currentSlice.tokens += slice.tokens;
+            chatAgg.set(slice.label, currentSlice);
           }
         }
+        const business = mergeSessionRollupBusiness(rollups);
         chatAggCache = {
           signature: sessionSignature,
           day: todayKey,
@@ -383,18 +473,12 @@ export function activate(context: vscode.ExtensionContext): void {
           todayTokensPartial,
           todayCredits,
           todayCreditsEstimated: todayInput === 0 || todayCreditsEstimated,
-          businessWorkspace: summarizeBusinessActivity(
-            businessEvents,
-            businessRates,
-            businessCostOptions,
-            businessRegistry,
-          ),
-          businessToday: summarizeBusinessActivity(
-            todayBusinessEvents,
-            businessRates,
-            businessCostOptions,
-            businessRegistry,
-          ),
+          businessWorkspace: business.workspace,
+          businessToday: business.today,
+          complete: rollupRefresh.complete,
+          processedSessionCount: rollupRefresh.processedSessionCount,
+          totalSessionCount: rollupRefresh.totalSessionCount,
+          continuationDelayMs: rollupRefresh.continuationDelayMs,
           breakdown: [...chatAgg.values()].map((s) => ({
             category: s.category,
             label: s.label,
@@ -416,14 +500,14 @@ export function activate(context: vscode.ExtensionContext): void {
       const todayCostUsd = costOf(todayTotalTokens, chatAggCache.todayCredits);
       const costUsesTokens = usdPerMillionTokens > 0;
       const chatCostPartial = costUsesTokens
-        ? chatAggCache.tokensPartial
-        : chatAggCache.creditsEstimated;
+        ? chatAggCache.tokensPartial || !chatAggCache.complete
+        : chatAggCache.creditsEstimated || !chatAggCache.complete;
       const sessionCostPartial = costUsesTokens
         ? sessionUsage.partial
         : sessionCreditsEstimated;
       const todayCostPartial = costUsesTokens
-        ? chatAggCache.todayTokensPartial
-        : chatAggCache.todayCreditsEstimated;
+        ? chatAggCache.todayTokensPartial || !chatAggCache.complete
+        : chatAggCache.todayCreditsEstimated || !chatAggCache.complete;
       const lastTurnTotalTokens = lastReal
         ? (lastReal.tokens?.inputTokens ?? 0) + (lastReal.tokens?.outputTokens ?? 0)
         : undefined;
@@ -439,7 +523,7 @@ export function activate(context: vscode.ExtensionContext): void {
         !Number.isNaN(lastRealTimestamp) &&
         lastRealTimestamp >= todayMs &&
         lastRealTimestamp < tomorrowMs;
-      const sessionBusiness = summarizeBusinessActivity(
+      const sessionBusiness = sessionRollupCache.get(session)?.businessWorkspace ?? summarizeBusinessActivity(
         events,
         businessRates,
         businessCostOptions,
@@ -449,11 +533,12 @@ export function activate(context: vscode.ExtensionContext): void {
         buildForecastView(forecast, fs.accuracy(), modelEvent, {
           forecastTarget,
           sessionShortId: session.sessionId.slice(0, 8),
-          sessionTitle: readSessionTitle(session),
+          sessionTitle,
           lastPromptPreview: current.promptText.replace(/\s+/g, ' ').trim().slice(0, 140),
           turnCount: real.length,
-          contextSeries: real.map((e) => e.tokens!.inputTokens),
-          turnPrompts: real.map((e) => e.promptText.replace(/\s+/g, ' ').trim().slice(0, 70)),
+          contextSeries: liveHistory.contextSeries,
+          contextSeriesStartTurn: liveHistory.contextSeriesStartTurn,
+          turnPrompts: liveHistory.turnPrompts,
           realLastInputTokens: lastReal?.tokens?.inputTokens,
           realLastTotalTokens: lastTurnTotalTokens,
           realLastCredits: lastTurnCredits,
@@ -466,27 +551,30 @@ export function activate(context: vscode.ExtensionContext): void {
           chatBreakdown: chatAggCache.breakdown.length ? chatAggCache.breakdown : undefined,
           chatInputTokens: chatAggCache.input || undefined,
           chatSessionCount: allSessions.length || undefined,
+          aggregateLoading: !chatAggCache.complete,
+          aggregateSessionsProcessed: chatAggCache.processedSessionCount,
           aggregateScope:
             scope === 'all' ? 'allWindows' : workspaceHash ? 'workspace' : 'emptyWindow',
-          chatTotalTokens: chatTotalTokens || undefined,
-          chatTokensPartial: chatAggCache.tokensPartial,
-          chatCredits: chatAggCache.credits || undefined,
-          chatCreditsEstimated: chatAggCache.creditsEstimated,
+          chatTotalTokens,
+          chatTokensPartial: chatAggCache.tokensPartial || !chatAggCache.complete,
+          chatCredits: chatAggCache.credits,
+          chatCreditsEstimated: chatAggCache.creditsEstimated || !chatAggCache.complete,
           chatCostUsd,
           chatCostPartial,
-          sessionTotalTokens: sessionTotalTokens || undefined,
+          sessionTotalTokens,
           sessionTokensPartial: sessionUsage.partial,
-          sessionCredits: sessionCredits || undefined,
+          sessionCredits,
           sessionCreditsEstimated,
           sessionCostUsd,
           sessionCostPartial,
-          todayTotalTokens: todayTotalTokens || undefined,
-          todayTokensPartial: chatAggCache.todayTokensPartial,
-          todayCredits: chatAggCache.todayCredits || undefined,
-          todayCreditsEstimated: chatAggCache.todayCreditsEstimated,
+          todayTotalTokens,
+          todayTokensPartial: chatAggCache.todayTokensPartial || !chatAggCache.complete,
+          todayCredits: chatAggCache.todayCredits,
+          todayCreditsEstimated: chatAggCache.todayCreditsEstimated || !chatAggCache.complete,
           todayCostUsd,
           todayCostPartial,
-          allTurns,
+          allTurns: liveHistory.allTurns,
+          allTurnsTotal: liveHistory.allTurnsTotal,
         }),
         modelEvent.model,
         {
@@ -495,6 +583,13 @@ export function activate(context: vscode.ExtensionContext): void {
           today: chatAggCache.businessToday,
         },
       );
+      if (chatAggCache.complete) {
+        cancelAggregateContinuation();
+        lastForecastRefreshSignature = refreshSignature;
+      } else {
+        lastForecastRefreshSignature = undefined;
+        scheduleAggregateContinuation(chatAggCache.continuationDelayMs);
+      }
       lastRefreshError = undefined;
     } catch (error) {
       const detail = error instanceof Error ? `${error.message}\n${error.stack ?? ''}` : String(error);
@@ -520,12 +615,13 @@ export function activate(context: vscode.ExtensionContext): void {
     const scope = normalizeCaptureScope(captureCfg.get('scope', 'window'));
     const hashScope = scope !== 'all' && workspaceHash ? workspaceHash : undefined;
     watcher = new CopilotWatcher((event, meta) => {
+      if (!store.captureEnabled) return;
       // A preliminary event is exactly when the just-sent prompt should appear
       // in Live. Durable ledger sync still waits for final source evidence.
       refreshForecast();
       if (!meta?.preliminary) {
         log(`capture: chat ${event.sessionId.slice(0, 8)}, turn ${event.turnIndex}`);
-        void syncPersonalLedger(true);
+        void syncPersonalLedger(false);
       }
     }, hashScope, workspaceStorageRoot);
     watcher.start();
@@ -538,8 +634,11 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   };
   const stopWatcher = (): void => {
+    cancelAggregateContinuation();
     watcher?.dispose();
     watcher = undefined;
+    forecastHistory.clear();
+    lastForecastRefreshSignature = undefined;
   };
   context.subscriptions.push({ dispose: stopWatcher });
 
@@ -662,6 +761,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await config.update('enabledGroups', next, configurationTarget());
     },
   });
+  heartbeatLiveView = () => provider.heartbeat();
   context.subscriptions.push(provider);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(DashboardViewProvider.viewType, provider, {
@@ -942,6 +1042,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const ledgerTimer = setInterval(() => void syncPersonalLedger(false), 5000);
   context.subscriptions.push({
     dispose: () => {
+      cancelAggregateContinuation();
       clearTimeout(warmupTimer);
       clearInterval(forecastTimer);
       clearInterval(ledgerTimer);

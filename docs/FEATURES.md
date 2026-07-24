@@ -16,11 +16,11 @@ By default, a folder window is scoped to **that folder's VS Code workspace stora
 
 | Term | Meaning |
 |---|---|
-| **This prompt** | The single latest turn (one message). |
+| **Latest turn** | The single most recent Copilot request. |
 | **Context window** | What Copilot has loaded *right now*. This is the only thing that **resets** — it drops when Copilot auto-summarizes near the model's limit. |
 | **This chat** | The current conversation, summed across its turns (cumulative). |
 | **All chats** | Every conversation in this workspace, summed. |
-| **Total cost** | Money across **all chats** in this workspace (never resets). |
+| **Usage & cost** | Tokens, AI credits, and configured dollar estimates across a selected scope. |
 
 The word "session" is intentionally **not** used in the UI because it was ambiguous.
 
@@ -28,7 +28,7 @@ The word "session" is intentionally **not** used in the UI because it was ambigu
 
 ## 2. Product surfaces
 
-Open with **Token Lens: Open dashboard** (or the activity-bar icon). Five tabs: **Live**, **Overview**, **Turns**, **Profiles**, and **Info**. Live is the default pitch and daily-work surface.
+Open with **Token Lens: Open dashboard** (or the activity-bar icon). Five tabs: **Live**, **Overview**, **Turns**, **Workflows**, and **Info**. Live is the default pitch and daily-work surface.
 
 ### Overview
 - Persistent personal totals for Today / 7 days / 30 days / All.
@@ -49,8 +49,8 @@ Shows the active chat's title (or `Chat <id>`) and the current turn number.
 ### Next (forecast) card
 - **Last turn → Next turn (est.)** — the real input tokens the previous turn cost vs. the predicted cost of your next prompt, side by side.
 - A one-line detail: `≈ N credits · range low–high tokens` (adds `low conf.` when uncertain).
-- **Forecast accuracy** — median error of past predictions on your own turns (self-measured at runtime).
-- An experimental warning when context enters a possible reset zone; current
+- **Forecast error** — median absolute error and range coverage on past measured turns.
+- An experimental warning when context approaches the model limit; current
   validation does not support treating it as reliable reset prediction.
 
 ### Context weight card
@@ -59,19 +59,19 @@ Shows the active chat's title (or `Chat <id>`) and the current turn number.
 - A per-turn **bar graph** of context growth (downsampled for long chats) with a full-resolution trend line; resets show as drops. X-axis marks turn 1, reset count, and now.
 
 ### Where tokens go card
-Input tokens split by category (**system / tools / history / message**) as stacked bars for **This prompt → This chat → All chats · N**, sharing one color legend. Data comes straight from Copilot's on-disk `promptTokenDetails`.
+Input tokens split by source category as stacked bars for **Latest turn → This chat → All chats · N**, sharing one color legend. Data comes straight from Copilot's on-disk `promptTokenDetails`.
 
-### Total cost card
+### Usage & cost card
 Three figures — **Tokens**, **AICs** (Copilot credits), and **Cost** — selectable for the workspace, this chat, or today. Each shows the last metered turn's matching-unit delta (`▲`). Dollars are a derived estimate (see config below); AIC totals are marked estimated if any turn lacks a metered credit value.
 
-### Live Copilot data card
+### Current model card
 The active model/agent and its reasoning effort (shown only when known).
 
-### Profiles tab
+### Workflows tab
 - Optional built-in or custom attribution profiles; core ledger capture remains independent.
 - **FD&E HQ vs other** request attribution with four mutually exclusive evidence buckets: explicit workflow (high), tool-associated (medium), mixed (low), and Other Copilot.
 - Whole-request tokens/cost, share of known spend, turns, and MCP calls per bucket. This is workflow attribution, not an exact per-MCP token split.
-- Service call counts, success/failure, observed duration, configured external allocation, and associated cost by workflow.
+- Service call counts, success/failure, observed duration, configured tool cost, and correlated request usage by workflow.
 - Every request appears once; workspace location alone never establishes FD&E attribution.
 
 ### Turns tab
@@ -87,7 +87,7 @@ A compact in-product manual: quick start, tab guide, number definitions, card gu
 - **Model-agnostic** and free (pure arithmetic) — works for any Copilot model.
 - Rebuilds live from the active chat's **real metered tokens** on disk, so it appears immediately and doesn't depend on lagging capture.
 - **Self-calibrating** prediction interval — tightens/loosens from the session's own actual-vs-predicted spread.
-- **Reset-zone indicator** — an experimental model-relative proximity hint. The
+- **Context-limit warning** — an experimental model-relative proximity hint. The
 	current expanded corpus shows poor recall and precision, so it is not a
 	reliable prediction of the next summarization.
 - **Tool-aware growth** — blends median turn growth with tool-call counts.

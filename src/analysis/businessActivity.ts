@@ -264,6 +264,117 @@ export function summarizeBusinessActivity(
   };
 }
 
+/** Combine independently summarized sessions without needing their prompt-bearing events. */
+export function mergeBusinessActivitySummaries(
+  summaries: readonly BusinessActivitySummary[],
+): BusinessActivitySummary {
+  const services = new Map<string, BusinessServiceUsage>();
+  const workflows = new Map<string, BusinessWorkflowUsage>();
+  const skills = new Map<string, number>();
+  const attribution = new Map<string, BusinessAttributionUsage>();
+
+  for (const summary of summaries) {
+    for (const row of summary.services) {
+      const key = `${row.groupId}:${row.id}`;
+      const current = services.get(key);
+      services.set(key, current
+        ? {
+            ...current,
+            calls: current.calls + row.calls,
+            successfulCalls: current.successfulCalls + row.successfulCalls,
+            failedCalls: current.failedCalls + row.failedCalls,
+            durationMs: current.durationMs + row.durationMs,
+            pricedCalls: current.pricedCalls + row.pricedCalls,
+            estimatedCostUsd: optionalSum(current.estimatedCostUsd, row.estimatedCostUsd),
+          }
+        : { ...row });
+    }
+    for (const row of summary.workflows) {
+      const current = workflows.get(row.id);
+      workflows.set(row.id, current
+        ? {
+            ...current,
+            turns: current.turns + row.turns,
+            toolCalls: current.toolCalls + row.toolCalls,
+            businessCalls: current.businessCalls + row.businessCalls,
+            unpricedCalls: current.unpricedCalls + row.unpricedCalls,
+            aiCostUsd: optionalSum(current.aiCostUsd, row.aiCostUsd),
+            aiCostPartial: !!current.aiCostPartial || !!row.aiCostPartial,
+            externalCostUsd: current.externalCostUsd + row.externalCostUsd,
+          }
+        : { ...row });
+    }
+    for (const row of summary.skills) {
+      skills.set(row.name, (skills.get(row.name) ?? 0) + row.invocations);
+    }
+    for (const row of summary.attribution) {
+      const current = attribution.get(row.id);
+      attribution.set(row.id, current
+        ? {
+            ...current,
+            turns: current.turns + row.turns,
+            meteredTurns: current.meteredTurns + row.meteredTurns,
+            mcpCalls: current.mcpCalls + row.mcpCalls,
+            tokens: current.tokens + row.tokens,
+            tokensPartial: current.tokensPartial || row.tokensPartial,
+            aiCostUsd: optionalSum(current.aiCostUsd, row.aiCostUsd),
+            aiCostPartial: !!current.aiCostPartial || !!row.aiCostPartial,
+          }
+        : { ...row });
+    }
+  }
+
+  return {
+    turns: sumOf(summaries, (summary) => summary.turns),
+    totalToolCalls: sumOf(summaries, (summary) => summary.totalToolCalls),
+    businessCalls: sumOf(summaries, (summary) => summary.businessCalls),
+    successfulBusinessCalls: sumOf(summaries, (summary) => summary.successfulBusinessCalls),
+    failedBusinessCalls: sumOf(summaries, (summary) => summary.failedBusinessCalls),
+    durationMs: sumOf(summaries, (summary) => summary.durationMs),
+    pricedCalls: sumOf(summaries, (summary) => summary.pricedCalls),
+    unpricedCalls: sumOf(summaries, (summary) => summary.unpricedCalls),
+    aiCostUsd: optionalSummarySum(summaries, (summary) => summary.aiCostUsd),
+    aiCostPartial: summaries.some((summary) => !!summary.aiCostPartial),
+    externalCostUsd: sumOf(summaries, (summary) => summary.externalCostUsd),
+    trackedCostUsd: optionalSummarySum(summaries, (summary) => summary.trackedCostUsd),
+    services: [...services.values()].sort((a, b) =>
+      (b.estimatedCostUsd ?? 0) - (a.estimatedCostUsd ?? 0) ||
+      a.groupName.localeCompare(b.groupName) ||
+      b.calls - a.calls ||
+      a.name.localeCompare(b.name),
+    ),
+    workflows: [...workflows.values()].sort((a, b) =>
+      knownWorkflowCost(b) - knownWorkflowCost(a) ||
+      b.turns - a.turns ||
+      a.name.localeCompare(b.name),
+    ),
+    skills: [...skills.entries()]
+      .map(([name, invocations]) => ({ name, invocations }))
+      .sort((a, b) => b.invocations - a.invocations || a.name.localeCompare(b.name)),
+    attribution: [...attribution.values()].sort(compareAttribution),
+  };
+}
+
+function sumOf<T>(values: readonly T[], select: (value: T) => number): number {
+  return values.reduce((sum, value) => sum + select(value), 0);
+}
+
+function optionalSum(
+  left: number | undefined,
+  right: number | undefined,
+): number | undefined {
+  return left === undefined && right === undefined ? undefined : (left ?? 0) + (right ?? 0);
+}
+
+function optionalSummarySum(
+  summaries: readonly BusinessActivitySummary[],
+  select: (summary: BusinessActivitySummary) => number | undefined,
+): number | undefined {
+  return summaries.some((summary) => select(summary) !== undefined)
+    ? summaries.reduce((sum, summary) => sum + (select(summary) ?? 0), 0)
+    : undefined;
+}
+
 function detectWorkflow(
   promptText: string,
   loadedSkills: readonly string[],

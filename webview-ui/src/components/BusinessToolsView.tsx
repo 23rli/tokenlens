@@ -33,7 +33,7 @@ export function BusinessToolsView({
   const scopeIndex = SCOPES.findIndex((item) => item.key === scope);
   const enabledGroupCount = tools.groups.filter((group) => group.enabled).length;
   const primaryGroup = tools.groups.find((group) => group.enabled && group.id !== 'all-mcp');
-  const comparisonTitle = primaryGroup ? `${primaryGroup.name} vs other` : 'Attributed AI spend';
+  const comparisonTitle = primaryGroup ? `${primaryGroup.name} vs everything else` : 'Attributed AI usage';
 
   const selectScope = (index: number): void => {
     const normalized = (index + SCOPES.length) % SCOPES.length;
@@ -54,8 +54,8 @@ export function BusinessToolsView({
       <section class="card business-groups">
         <div class="business-head">
           <div>
-            <div class="section-title" role="heading" aria-level={2}>Profiles</div>
-            <div class="business-sub">Optional local labels layered onto immutable ledger facts</div>
+            <div class="section-title" role="heading" aria-level={2}>Workflow attribution</div>
+            <div class="business-sub">Optional local rules that group whole Copilot requests</div>
           </div>
           <button
             class={`business-master${tools.trackingEnabled ? ' on' : ''}`}
@@ -89,11 +89,11 @@ export function BusinessToolsView({
 
       {!tools.trackingEnabled ? (
         <section class="card business-empty muted">
-          Profile attribution is off. Personal usage continues to accumulate in the local ledger.
+          Workflow attribution is off. Core usage tracking continues in Overview.
         </section>
       ) : enabledGroupCount === 0 ? (
         <section class="card business-empty muted">
-          Select one or more profiles that match the workflows you want to understand.
+          Select one or more workflow profiles to classify matching Copilot requests.
         </section>
       ) : !summary ? (
         <section class="card business-empty muted">Waiting for local Copilot activity…</section>
@@ -124,7 +124,7 @@ function GroupRow({
       <div class="business-group-copy">
         <div class="business-group-name">
           {group.name}
-          <span class="business-kind">{group.source}</span>
+          <span class="business-kind">{group.source === 'built-in' ? 'Built in' : 'Custom'}</span>
         </div>
         <div class="business-group-description">{group.description}</div>
       </div>
@@ -139,7 +139,7 @@ function GroupRow({
           enabled: !group.enabled,
         })}
       >
-        {group.enabled ? '✓' : '○'}
+        {group.enabled ? 'On' : 'Off'}
       </button>
     </div>
   );
@@ -167,8 +167,8 @@ function ActivityView({
       <section class="card business-summary">
         <div class="business-head">
           <div>
-            <div class="section-title" role="heading" aria-level={2}>Workflow cost envelope</div>
-            <div class="business-sub">Request-level Copilot spend + observed MCP activity</div>
+            <div class="section-title" role="heading" aria-level={2}>Attributed usage &amp; cost</div>
+            <div class="business-sub">Whole-request Copilot usage alongside observed MCP activity</div>
           </div>
           <button class="ghost business-config" onClick={() => post({ type: 'openBusinessToolSettings' })}>
             Set rates
@@ -183,6 +183,7 @@ function ActivityView({
               aria-selected={scope === item.key}
               tabIndex={scope === item.key ? 0 : -1}
               class={`business-scope-btn${scope === item.key ? ' active' : ''}`}
+              title={item.key === 'today' ? 'Your local calendar day' : undefined}
               onClick={() => setScope(item.key)}
               onKeyDown={onScopeKeyDown}
             >
@@ -192,8 +193,8 @@ function ActivityView({
         </div>
         <SummaryTiles summary={summary} />
         <p class="business-note">
-          Copilot cost is measured for matched turns, not split among individual MCP calls.
-          External dollars use only configured allocation rates. Incomplete bases are labelled known.
+          Each request keeps its full Copilot usage. MCP calls are shown as activity, not given
+          invented per-call token totals. Tool-cost estimates use only rates you configured.
         </p>
       </section>
 
@@ -201,7 +202,7 @@ function ActivityView({
 
       {summary.skills.length > 0 && (
         <section class="card business-skills">
-          <div class="section-title" role="heading" aria-level={2}>Detected skills</div>
+          <div class="section-title" role="heading" aria-level={2}>Detected skill workflows</div>
           <div class="business-chip-row">
             {summary.skills.map((skill) => (
               <span class="business-chip" key={skill.name}>
@@ -223,7 +224,7 @@ function ActivityView({
               <span role="columnheader">Service</span>
               <span role="columnheader">Calls</span>
               <span role="columnheader">Success</span>
-              <span role="columnheader">Cost</span>
+              <span role="columnheader">Configured cost</span>
             </div>
             {summary.services.map((service) => <ServiceRow key={service.id} service={service} />)}
           </div>
@@ -234,7 +235,7 @@ function ActivityView({
 
       <section class="card business-workflows">
         <div class="business-section-head">
-          <span class="section-title" role="heading" aria-level={2}>Associated cost by workflow</span>
+          <span class="section-title" role="heading" aria-level={2}>Usage by detected workflow</span>
           <span class="business-count">{summary.turns} turns</span>
         </div>
         {summary.workflows.length > 0 ? (
@@ -287,17 +288,17 @@ function AttributionView({
     <section class="card business-attribution">
       <div class="business-section-head">
         <span class="section-title" role="heading" aria-level={2}>{title}</span>
-        <span class="business-count">one request, one bucket</span>
+        <span class="business-count">each request counted once</span>
       </div>
       {primaryGroup && (
         <div class="business-comparison-tiles" aria-label={`${primaryGroup.name} related versus other or mixed known ${useCost ? 'AI cost' : 'tokens'}`}>
           <div>
-            <strong>{formatAttributionAmount(primaryAmount, primaryPartial, useCost)}</strong>
-            <span>{primaryGroup.name} related · {comparisonShares[0] ?? 0}%</span>
+            <strong>{formatAttributionAmount(primaryAmount, useCost)}</strong>
+            <span>{primaryPartial ? 'Known · ' : ''}{primaryGroup.name} matched · {comparisonShares[0] ?? 0}%</span>
           </div>
           <div>
-            <strong>{formatAttributionAmount(otherAmount, otherPartial, useCost)}</strong>
-            <span>Other / mixed · {comparisonShares[1] ?? 0}%</span>
+            <strong>{formatAttributionAmount(otherAmount, useCost)}</strong>
+            <span>{otherPartial ? 'Known · ' : ''}Other or multiple matches · {comparisonShares[1] ?? 0}%</span>
           </div>
         </div>
       )}
@@ -325,10 +326,10 @@ function AttributionView({
                   <span style={{ width: `${Math.max(0, Math.min(100, share))}%` }} />
                 </div>
                 <div class="business-attribution-meta">
-                  <span>{displayedShare}% known {useCost ? 'AI cost' : 'tokens'}</span>
+                  <span>{displayedShare}% of known {useCost ? 'AI cost' : 'tokens'}</span>
                   <span>{row.turns} turn{row.turns === 1 ? '' : 's'}</span>
-                  <span>{row.mcpCalls} MCP</span>
-                  {useCost && <span>{fmtNum(row.tokens)} tokens{row.tokensPartial ? ' measured' : ''}</span>}
+                  <span>{row.mcpCalls} MCP call{row.mcpCalls === 1 ? '' : 's'}</span>
+                  {useCost && <span>{fmtNum(row.tokens)} known tokens</span>}
                 </div>
               </div>
             );
@@ -338,8 +339,8 @@ function AttributionView({
         <p class="business-empty muted">No turns available for attribution in this scope.</p>
       )}
       <p class="business-note">
-        High confidence requires an explicit selected skill, agent, or saved prompt. Associated
-        means a selected group's MCP participated. Other has no selected-group signal.
+        Explicit workflow is the strongest signal. Tool match means a selected profile participated.
+        Multiple matches means more than one profile participated. These are correlations, not causal per-tool costs.
       </p>
     </section>
   );
@@ -348,13 +349,13 @@ function AttributionView({
 function confidenceLabel(row: BusinessAttributionUsage): string {
   switch (row.basis) {
     case 'explicit-workflow':
-      return 'explicit · high';
+      return 'Explicit workflow';
     case 'tool-associated':
-      return 'tool-associated · medium';
+      return 'Tool match';
     case 'mixed':
-      return 'mixed · low';
+      return 'Multiple profiles';
     case 'other':
-      return 'unattributed';
+      return 'No profile match';
   }
 }
 
@@ -380,26 +381,26 @@ function SummaryTiles({ summary }: { summary: BusinessActivitySummary }) {
       ? '$0'
       : summary.pricedCalls === 0
         ? 'unpriced'
-        : `${fmtUsd(summary.externalCostUsd)}${summary.unpricedCalls ? ' known' : ''}`;
+        : fmtUsd(summary.externalCostUsd);
   const totalLabel = summary.trackedCostUsd == null
     ? '—'
-    : `${fmtUsd(summary.trackedCostUsd)}${summary.unpricedCalls || summary.aiCostPartial ? ' known' : ''}`;
+    : fmtUsd(summary.trackedCostUsd);
 
   return (
     <div class="business-tiles">
       <div class="business-tile">
         <strong>
-          {summary.aiCostUsd == null ? '—' : `${fmtUsd(summary.aiCostUsd)}${summary.aiCostPartial ? ' known' : ''}`}
+          {summary.aiCostUsd == null ? '—' : fmtUsd(summary.aiCostUsd)}
         </strong>
-        <span>Matched AI</span>
+        <span>{summary.aiCostPartial ? 'Known attributed AI cost' : 'Attributed AI cost'}</span>
       </div>
       <div class="business-tile">
         <strong>{externalLabel}</strong>
-        <span>External allocation</span>
+        <span>{summary.unpricedCalls ? 'Known configured tool cost' : 'Configured tool cost'}</span>
       </div>
       <div class="business-tile">
         <strong>{totalLabel}</strong>
-        <span>{summary.unpricedCalls || summary.aiCostPartial ? 'Known envelope' : 'Cost envelope'}</span>
+        <span>{summary.unpricedCalls || summary.aiCostPartial ? 'Known total' : 'Estimated total'}</span>
       </div>
     </div>
   );
@@ -432,11 +433,11 @@ function WorkflowRow({ workflow }: { workflow: BusinessWorkflowUsage }) {
     <div class="business-workflow-row" role="listitem">
       <div class="business-workflow-main">
         <span class="business-workflow-name" title={workflow.name}>{workflow.name}</span>
-        <span class="business-kind">{workflow.kind}</span>
+        <span class="business-kind">{workflowKindLabel(workflow.kind)}</span>
       </div>
       <div class="business-workflow-meta">
         <span>{workflow.turns} turn{workflow.turns === 1 ? '' : 's'}</span>
-        <span>{workflow.businessCalls} MCP</span>
+        <span>{workflow.businessCalls} MCP call{workflow.businessCalls === 1 ? '' : 's'}</span>
         <strong>
           {hasKnownCost
             ? `${fmtUsd(knownCost)}${workflow.unpricedCalls || workflow.aiCostPartial ? ' known' : ''}`
@@ -454,7 +455,15 @@ function formatDuration(ms: number): string {
   return `${(ms / 60_000).toFixed(1)} min`;
 }
 
-function formatAttributionAmount(amount: number, partial: boolean, useCost: boolean): string {
-  const formatted = useCost ? fmtUsd(amount) : fmtNum(amount);
-  return `${formatted}${partial ? ' known' : ''}`;
+function workflowKindLabel(kind: BusinessWorkflowUsage['kind']): string {
+  switch (kind) {
+    case 'skill': return 'Skill';
+    case 'agent': return 'Agent';
+    case 'prompt': return 'Saved prompt';
+    case 'general': return 'General';
+  }
+}
+
+function formatAttributionAmount(amount: number, useCost: boolean): string {
+  return useCost ? fmtUsd(amount) : fmtNum(amount);
 }

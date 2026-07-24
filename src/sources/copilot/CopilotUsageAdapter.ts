@@ -10,8 +10,11 @@ import type {
   UsageToolObservation,
 } from '@tokentama/shared-types';
 import { USAGE_OBSERVATION_SCHEMA_VERSION } from '@tokentama/shared-types';
-import type { CopilotSessionPaths } from '../../capture/copilotPaths';
-import { readSessionEvents } from '../../capture/copilotReader';
+import {
+  copilotSessionProjectionSignature,
+  type CopilotSessionPaths,
+} from '../../capture/copilotPaths';
+import { readSessionSnapshot } from '../../capture/copilotReader';
 import { finalizeUsageObservation, stableHash } from '../../ledger/canonical';
 import type { SourceAdapter, SourceAdapterCapabilities, SourceScanResult } from '../types';
 
@@ -28,25 +31,54 @@ export class CopilotUsageAdapter implements SourceAdapter<readonly CopilotSessio
     tools: true,
     perToolTokens: false,
   };
+  private readonly sessionCache = new Map<
+    string,
+    { signature: string; observations: UsageObservation[] }
+  >();
 
   constructor(private readonly workspaceStorageRoot: string) {}
 
   async scan(sessions: readonly CopilotSessionPaths[]): Promise<SourceScanResult> {
     const observedAt = new Date().toISOString();
     const observations: UsageObservation[] = [];
+    const liveSessionKeys = new Set<string>();
     let readErrors = 0;
-    for (const session of sessions) {
+    for (let sessionIndex = 0; sessionIndex < sessions.length; sessionIndex += 1) {
+      const session = sessions[sessionIndex];
+      const sessionKey = `${session.workspaceHash}/${session.sessionId}`;
+      const signature = copilotSessionProjectionSignature(session);
+      liveSessionKeys.add(sessionKey);
+      const cached = this.sessionCache.get(sessionKey);
+      if (cached?.signature === signature) {
+        observations.push(...cached.observations);
+        continue;
+      }
       try {
         const project = this.resolveProject(session.workspaceHash);
-        for (const event of readSessionEvents(session)) {
+        const sessionObservations: UsageObservation[] = [];
+        const snapshot = readSessionSnapshot(session);
+        for (const event of snapshot.events) {
           // A transcript-only pending row has no stable provider request ID and
           // is transient Live state, not durable usage.
           if (event.meteringStatus === 'pending' && !event.sourceRequestId) continue;
-          observations.push(this.projectEvent(event, session, project, observedAt));
+          sessionObservations.push(this.projectEvent(event, session, project, observedAt));
+        }
+        observations.push(...sessionObservations);
+        if (snapshot.complete) {
+          this.sessionCache.set(sessionKey, { signature, observations: sessionObservations });
+        } else {
+          readErrors += 1;
         }
       } catch {
         readErrors += 1;
       }
+      // Parsing a single large JSONL source is synchronous, but yielding between
+      // sources lets the webview, cancellation/config events, and other
+      // extensions make progress during a 70–100-chat cold scan.
+      if (sessionIndex < sessions.length - 1) await yieldToEventLoop();
+    }
+    for (const key of this.sessionCache.keys()) {
+      if (!liveSessionKeys.has(key)) this.sessionCache.delete(key);
     }
     const status: UsageSourceHealth['status'] =
       readErrors > 0 ? 'error' : sessions.length > 0 ? 'ready' : 'empty';
@@ -276,4 +308,8 @@ export function copilotSourceRecordId(
     String(event.turnIndex),
     event.model?.id ?? 'unknown-model',
   );
+}
+
+function yieldToEventLoop(): Promise<void> {
+  return new Promise((resolve) => setImmediate(resolve));
 }

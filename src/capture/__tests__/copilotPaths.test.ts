@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { listCopilotSessions } from '../copilotPaths';
+import { copilotSessionSourceSignature, listCopilotSessions } from '../copilotPaths';
 
 const dirs: string[] = [];
 afterEach(() => {
@@ -39,6 +39,8 @@ describe('listCopilotSessions freshness', () => {
     expect(found[0].chatSessionPath).toBe(chat);
     expect(found[0].modelsJsonPath).toBe(models);
     expect(found[0].modifiedMs).toBe(fresh.getTime());
+    expect(found[0].sourceBytes).toBe(9);
+    expect(copilotSessionSourceSignature(found[0])).toBe(found[0].sourceSignature);
   });
 
   it('discovers a new chatSession before its transcript exists', () => {
@@ -61,6 +63,7 @@ describe('listCopilotSessions freshness', () => {
       transcriptPath: undefined,
       chatSessionPath: chat,
       modifiedMs: modified.getTime(),
+      sourceBytes: 3,
     });
   });
 
@@ -80,5 +83,38 @@ describe('listCopilotSessions freshness', () => {
     expect(found).toHaveLength(1);
     expect(found[0].transcriptPath).toBeDefined();
     expect(found[0].chatSessionPath).toBeDefined();
+  });
+
+  it('distinguishes which source changed when max mtime and total bytes collide', () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenlens-paths-'));
+    dirs.push(root);
+    const hash = 'workspace';
+    const session = 'signature-session';
+    const transcriptDir = join(root, hash, 'GitHub.copilot-chat', 'transcripts');
+    const chatDir = join(root, hash, 'chatSessions');
+    mkdirSync(transcriptDir, { recursive: true });
+    mkdirSync(chatDir, { recursive: true });
+    const transcript = join(transcriptDir, `${session}.jsonl`);
+    const chat = join(chatDir, `${session}.jsonl`);
+    const old = new Date('2026-07-23T10:00:00.000Z');
+    const fresh = new Date('2026-07-23T10:01:00.000Z');
+
+    writeFileSync(transcript, 'aa\n');
+    writeFileSync(chat, 'bbbb\n');
+    utimesSync(transcript, old, old);
+    utimesSync(chat, fresh, fresh);
+    const first = listCopilotSessions(root, hash)[0];
+
+    writeFileSync(transcript, 'aaaa\n');
+    writeFileSync(chat, 'bb\n');
+    utimesSync(transcript, fresh, fresh);
+    utimesSync(chat, old, old);
+    const second = listCopilotSessions(root, hash)[0];
+
+    expect(second.modifiedMs).toBe(first.modifiedMs);
+    expect(second.sourceBytes).toBe(first.sourceBytes);
+    expect(copilotSessionSourceSignature(second)).not.toBe(
+      copilotSessionSourceSignature(first),
+    );
   });
 });

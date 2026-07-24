@@ -48,14 +48,13 @@ export function ContextPanel({
     return (
       <section class="card context">
         <div class="context-head">
-          <Tip text="Input splits into system · tools · history · message. History usually dominates in long chats — start a fresh chat for a new task, and turn off tools or attachments you don't need.">
+          <Tip text="Source-reported input categories. Long chats usually carry more message history; tool definitions, tool results, files, and system instructions can also contribute.">
             <span class="section-title" role="heading" aria-level={2}>Where tokens go</span>
           </Tip>
         </div>
         <div class="context-bar context-bar-empty" />
         <p class="context-note muted">
-          Reading Copilot's token breakdown from disk… the system / tools / history / message split
-          appears once the current turn is metered.
+          Waiting for Copilot's input-category breakdown. It appears after the latest turn is measured.
         </p>
       </section>
     );
@@ -82,12 +81,13 @@ export function ContextPanel({
         {slices.map((s, i) => {
           const w = (s.tokens / sum) * 100;
           const p = Math.round(w);
+          const displayLabel = humanizeContextLabel(s.label);
           return (
             <div
               key={`${s.label}-${i}`}
               class="context-seg"
               style={{ width: `${w}%`, background: colorFor(s.label) }}
-              title={`${s.label}: ${fmtNum(s.tokens)} tokens (${p}%)`}
+              title={`${displayLabel}: ${fmtNum(s.tokens)} tokens (${p}%)`}
               aria-hidden="true"
             >
               {w >= 10 && <span class="context-seg-pct">{p}%</span>}
@@ -101,7 +101,7 @@ export function ContextPanel({
   return (
     <section class="card context">
       <div class="context-head">
-        <Tip text={`Input tokens by scope: this prompt → this chat → ${aggregateLabel.toLowerCase()}. History usually dominates in long chats — start a fresh chat for a new task, and turn off tools or attachments you don't need.`}>
+        <Tip text={`Source-reported input categories for the latest turn, this chat, and ${aggregateLabel.toLowerCase()}. These are request categories, not exact per-tool token totals.`}>
           <span class="section-title" role="heading" aria-level={2}>Where tokens go</span>
         </Tip>
       </div>
@@ -109,7 +109,7 @@ export function ContextPanel({
       {latest && (
         <>
           <div class="context-barrow">
-            <span class="context-barlabel">This prompt</span>
+            <span class="context-barlabel">Latest turn</span>
             <span class="context-barval">{fmtNum(latest.totalTokens)}</span>
           </div>
           {bar(latest.slices)}
@@ -142,10 +142,19 @@ export function ContextPanel({
         {order.map((label) => (
           <li key={label}>
             <span class="context-dot" style={{ background: colorFor(label) }} aria-hidden="true" />
-            <span class="context-label">{label}</span>
+            <span class="context-label">{humanizeContextLabel(label)}</span>
           </li>
         ))}
       </ul>
     </section>
   );
+}
+
+export function humanizeContextLabel(value: string): string {
+  const words = value
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .trim()
+    .toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Other';
 }

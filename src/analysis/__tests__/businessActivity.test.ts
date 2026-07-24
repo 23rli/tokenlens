@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { PromptEvent } from '@tokentama/shared-types';
-import { sanitizeBusinessToolRates, summarizeBusinessActivity } from '../businessActivity';
+import {
+  mergeBusinessActivitySummaries,
+  sanitizeBusinessToolRates,
+  summarizeBusinessActivity,
+} from '../businessActivity';
 import { createBusinessToolRegistry } from '../businessToolGroups';
 
 const costOptions = { usdPerMillionTokens: 1, usdPerCredit: 0 };
@@ -380,6 +384,44 @@ describe('summarizeBusinessActivity', () => {
     );
     expect(summary.aiCostUsd).toBeCloseTo(0.5, 8);
     expect(summary.aiCostPartial).toBe(false);
+  });
+
+  it('merges per-session summaries exactly like one broad event scan', () => {
+    const rates = { 'azure-devops': { usdPerCall: 0.1 } };
+    const first = [event({
+      promptText: '@fde-tpm file a story',
+      toolCalls: [{
+        toolName: 'mcp_azuredevops_m_wit_work_item',
+        toolKind: 'mcp',
+        success: true,
+        durationMs: 100,
+      }],
+    })];
+    const second = [event({
+      eventId: 'event-2',
+      sessionId: 'session-2',
+      turnIndex: 1,
+      promptText: 'Look up another work item',
+      toolCalls: [{
+        toolName: 'mcp_azuredevops_m_wit_work_item',
+        toolKind: 'mcp',
+        success: false,
+        durationMs: 200,
+      }],
+    })];
+
+    const broad = summarizeBusinessActivity(
+      [...first, ...second],
+      rates,
+      costOptions,
+      fdeRegistry,
+    );
+    const merged = mergeBusinessActivitySummaries([
+      summarizeBusinessActivity(first, rates, costOptions, fdeRegistry),
+      summarizeBusinessActivity(second, rates, costOptions, fdeRegistry),
+    ]);
+
+    expect(merged).toEqual(broad);
   });
 });
 

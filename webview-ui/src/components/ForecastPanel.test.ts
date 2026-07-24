@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ForecastView } from '../../../src/webview/contract';
-import { countInFlightTurns } from './ForecastPanel';
+import { countInFlightTurns, visibleTurnCount } from './ForecastPanel';
 
 describe('countInFlightTurns', () => {
   it('counts only genuine pending turns', () => {
@@ -12,5 +12,20 @@ describe('countInFlightTurns', () => {
       { prompt: 'now', tokens: 0, metered: false, status: 'pending' },
     ];
     expect(countInFlightTurns(turns)).toBe(1);
+  });
+});
+
+describe('visibleTurnCount', () => {
+  it('uses the full source count when display history is bounded', () => {
+    expect(visibleTurnCount({
+      allTurnsTotal: 1_000,
+      allTurns: Array.from({ length: 500 }, () => ({
+        prompt: 'turn',
+        tokens: 1,
+        metered: true,
+        status: 'metered' as const,
+      })),
+      turnCount: 999,
+    } as ForecastView)).toBe(1_000);
   });
 });

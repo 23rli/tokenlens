@@ -88,6 +88,8 @@ export interface ForecastView {
   turnCount: number;
   /** Real input tokens per turn, oldest→newest, for the context-growth bar graph. */
   contextSeries: number[];
+  /** Real turn number represented by contextSeries[0] when the payload is bounded. */
+  contextSeriesStartTurn?: number;
   /** Prompt excerpt per turn, aligned with contextSeries, for the graph tooltip. */
   turnPrompts?: string[];
   /** Where the last real turn's input tokens went (system/tools/history/message). */
@@ -104,6 +106,10 @@ export interface ForecastView {
   chatInputTokens?: number;
   /** Number of distinct conversations aggregated into the whole-chat totals. */
   chatSessionCount?: number;
+  /** True while cold historical rollups are being filled incrementally. */
+  aggregateLoading?: boolean;
+  /** Number of sessions currently represented in broad totals while loading. */
+  aggregateSessionsProcessed?: number;
   /** What the broadest totals represent in the current capture configuration. */
   aggregateScope?: 'workspace' | 'allWindows' | 'emptyWindow';
   /** Total tokens (input + output) across every conversation in this workspace. */
@@ -141,12 +147,16 @@ export interface ForecastView {
   todayCostPartial?: boolean;
   /** Every user turn (metered or still pending), oldest→newest, for the History list. */
   allTurns?: {
+    /** Original one-based turn number, retained when old display rows are omitted. */
+    turn?: number;
     prompt: string;
     tokens: number;
     metered: boolean;
     partial?: boolean;
     status: UsageMeteringStatus;
   }[];
+  /** Total prompt-bearing source turns, including omitted old display rows. */
+  allTurnsTotal?: number;
 }
 
 /** Snapshot pushed to the webview + status bar. */
@@ -158,6 +168,8 @@ export interface TokenLensState {
   captureEnabled: boolean;
   /** Durable, metadata-only usage history across local AI application adapters. */
   personalLedger?: PersonalLedgerOverview;
+  /** Safe, user-facing failure summary for the most recent ledger refresh. */
+  personalLedgerError?: string;
   /** Independently configurable business-tool groups and their local activity. */
   businessTools: BusinessToolsState;
   /** Live next-turn cost forecast + accuracy. */
@@ -167,6 +179,7 @@ export interface TokenLensState {
 /** Messages sent host → webview. */
 export type HostMessage =
   | { type: 'state'; state: TokenLensState }
+  | { type: 'heartbeat' }
   | { type: 'busy'; busy: boolean };
 
 /** Messages sent webview → host. */

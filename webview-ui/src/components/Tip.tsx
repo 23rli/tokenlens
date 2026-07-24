@@ -33,14 +33,14 @@ export function Tip({ text, children }: { text: string; children: ComponentChild
         if (e.key === 'Escape') setPos(null);
       }}
       tabIndex={0}
-      aria-describedby={pos ? tooltipId : undefined}
+      aria-describedby={tooltipId}
     >
       {children}
+      <span id={tooltipId} class="sr-only">{text}</span>
       {pos && (
         <span
-          id={tooltipId}
           class="tip-bubble"
-          role="tooltip"
+          aria-hidden="true"
           style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
         >
           {text}

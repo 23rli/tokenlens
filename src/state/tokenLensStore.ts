@@ -21,6 +21,7 @@ export class TokenLensStore implements vscode.Disposable {
   private forecast?: ForecastView;
   private businessActivity?: BusinessActivityScopes;
   private personalLedger?: PersonalLedgerOverview;
+  private personalLedgerError?: string;
 
   constructor() {
     this._captureEnabled = vscode.workspace
@@ -76,6 +77,14 @@ export class TokenLensStore implements vscode.Disposable {
   /** Replace the durable local-ledger query snapshot. */
   setPersonalLedger(overview: PersonalLedgerOverview): void {
     this.personalLedger = overview;
+    this.personalLedgerError = undefined;
+    this.emit();
+  }
+
+  /** Surface a safe refresh failure without exposing local paths or raw errors. */
+  setPersonalLedgerError(message: string | undefined): void {
+    if (this.personalLedgerError === message) return;
+    this.personalLedgerError = message;
     this.emit();
   }
 
@@ -102,6 +111,7 @@ export class TokenLensStore implements vscode.Disposable {
       model: this.model,
       captureEnabled: this._captureEnabled,
       personalLedger: this.personalLedger,
+      personalLedgerError: this.personalLedgerError,
       businessTools: {
         trackingEnabled: businessRegistry.enabled,
         groups: businessRegistry.groups,

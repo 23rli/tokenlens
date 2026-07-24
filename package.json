@@ -2,7 +2,7 @@
   "name": "tokentama",
   "displayName": "Token Lens",
   "description": "A private, local ledger for your personal AI usage: measured tokens, native charges, costs, models, projects, data coverage, and live GitHub Copilot forecasting.",
-  "version": "0.8.4",
+  "version": "0.8.6",
   "publisher": "tokentama",
   "license": "MIT",
   "repository": {
@@ -240,6 +240,8 @@
     "bench:forecast:robust": "node scripts/run-bench.mjs bench-forecast-robust.ts",
     "bench:forecast:improve": "node scripts/run-bench.mjs bench-forecast-improve.ts",
     "bench:forecast:toolsize": "node scripts/run-bench.mjs bench-forecast-toolsize.ts",
+    "bench:live-refresh": "node scripts/run-bench.mjs bench-live-refresh.ts",
+    "bench:live-source": "node scripts/run-bench.mjs bench-live-source.ts",
     "probe:context": "node scripts/run-bench.mjs probe-context.ts",
     "probe:viability": "node scripts/run-bench.mjs probe-viability.ts",
     "bench:ledger": "node scripts/run-bench.mjs bench-ledger.ts"

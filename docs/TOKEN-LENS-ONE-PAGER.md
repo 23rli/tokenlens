@@ -23,9 +23,9 @@ The result is adoption without instrumentation. Developers cannot build intuitio
 | **Overview** | Today/7-day/30-day/all-time usage by application, model, and project, with explicit data coverage and source health. |
 | **Turns** | Active-chat evidence showing measured usage and context growth turn by turn. |
 | **Export all** | User-controlled metadata-only JSON or CSV for Excel, Power BI, notebooks, or personal analysis. |
-| **Profiles** | Optional workflow cost envelopes plus participating MCP services, reliability, and duration. |
+| **Workflows** | Optional request-level usage attribution plus participating MCP services, reliability, and duration. |
 
-Profiles associate whole requests with observable workflow/tool evidence; they do not fabricate exact per-tool token splits.
+Workflow profiles correlate whole requests with observable workflow/tool evidence; they do not fabricate exact per-tool token splits or causal per-tool cost.
 
 ### Why Token Lens is different
 
@@ -49,7 +49,7 @@ These are engineering results from limited local data, not universal performance
 
 - **Developers:** understand context growth, model usage, and likely next-turn cost.
 - **AI platform and FinOps teams:** identify the measurements and governance controls worth scaling.
-- **Workflow owners:** compare known AI cost envelopes, service participation, reliability, and duration.
+- **Workflow owners:** compare attributed AI usage, configured tool cost, service participation, reliability, and duration.
 
 ### The ask: validate the observability layer
 
@@ -57,7 +57,7 @@ Run a focused local pilot with real VS Code Copilot workflows. Validate:
 
 1. developer value from Live context and cost visibility;
 2. trust and usefulness of Overview, coverage, and export;
-3. workflow value from Profiles; and
+3. workflow attribution from Workflows; and
 4. demand for a second adapter or governed aggregate view.
 
 **Token Lens does not ask developers to use less AI. It gives them the instrumentation to use it deliberately—and gives platform leaders evidence for what to build next.**

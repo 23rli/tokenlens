@@ -24,10 +24,23 @@ export interface LedgerAppendResult {
 
 interface LedgerReadResult {
   observations: UsageObservation[];
+  signature: string;
   fileCount: number;
   storageBytes: number;
   malformedLines: number;
   malformedFiles: string[];
+  readFailures: boolean;
+}
+
+interface LedgerFileInfo {
+  path: string;
+  size: number;
+  modifiedMs: number;
+}
+
+interface MaterializedLedgerSnapshot {
+  records: MaterializedUsageRecord[];
+  diagnostics: LocalLedgerDiagnostics;
 }
 
 /** Dependency-free append-only local metadata ledger. */
@@ -36,6 +49,10 @@ export class LocalUsageLedger {
   private readonly knownObservationIds = new Set<string>();
   private initPromise?: Promise<void>;
   private writeQueue: Promise<void> = Promise.resolve();
+  private materializedCache?: {
+    signature: string;
+    snapshot: MaterializedLedgerSnapshot;
+  };
 
   constructor(private readonly root: string) {}
 
@@ -71,51 +88,44 @@ export class LocalUsageLedger {
     return result!;
   }
 
-  async materialize(): Promise<{
-    records: MaterializedUsageRecord[];
-    diagnostics: LocalLedgerDiagnostics;
-  }> {
+  async materialize(): Promise<MaterializedLedgerSnapshot> {
     await this.initialize();
     await this.writeQueue;
-    const read = await this.readAll();
-    const materialized = materializeUsageObservations(read.observations);
-    const records = materialized.records;
-    return {
-      records,
-      diagnostics: {
-        schemaVersion: 1,
-        observationCount: materialized.uniqueObservationCount,
-        recordCount: records.length,
-        fileCount: read.fileCount,
-        storageBytes: read.storageBytes,
-        malformedLines: read.malformedLines,
-        malformedFiles: read.malformedFiles,
-        duplicateObservations: materialized.duplicateObservations,
-        conflictingRecords: records.filter((record) => record.conflictFields.length > 0).length,
-        oldestAt: records.length ? records.map((record) => record.occurredAt).sort()[0] : undefined,
-        newestAt: records.length ? records.map((record) => record.occurredAt).sort().at(-1) : undefined,
-        retention: 'until-cleared',
-      },
-    };
+    const files = await listJsonlFileInfo(this.root);
+    const signature = ledgerFileSignature(this.root, files);
+    if (this.materializedCache?.signature === signature) {
+      return this.materializedCache.snapshot;
+    }
+    const read = await this.readAll(files, signature);
+    const snapshot = materializeRead(read);
+    if (!read.readFailures) this.materializedCache = { signature, snapshot };
+    return snapshot;
   }
 
   async clear(): Promise<void> {
     await this.writeQueue;
     await rm(this.root, { recursive: true, force: true });
     this.knownObservationIds.clear();
+    this.materializedCache = undefined;
     this.initPromise = undefined;
   }
 
   private async loadKnownIds(): Promise<void> {
     await mkdir(this.root, { recursive: true });
-    const read = await this.readAll();
+    const files = await listJsonlFileInfo(this.root);
+    const signature = ledgerFileSignature(this.root, files);
+    const read = await this.readAll(files, signature);
     for (const observation of read.observations) {
       this.knownObservationIds.add(observation.observationId);
+    }
+    if (!read.readFailures) {
+      this.materializedCache = { signature, snapshot: materializeRead(read) };
     }
   }
 
   private async appendInternal(observations: UsageObservation[]): Promise<void> {
     if (observations.length === 0) return;
+    this.materializedCache = undefined;
     const byFile = new Map<string, UsageObservation[]>();
     for (const observation of observations) {
       const month = /^\d{4}-\d{2}/.exec(observation.occurredAt)?.[0] ?? 'unknown';
@@ -132,16 +142,20 @@ export class LocalUsageLedger {
     }
   }
 
-  private async readAll(): Promise<LedgerReadResult> {
-    const files = await listJsonlFiles(this.root);
+  private async readAll(
+    filesInput?: LedgerFileInfo[],
+    signatureInput?: string,
+  ): Promise<LedgerReadResult> {
+    const files = filesInput ?? await listJsonlFileInfo(this.root);
+    const signature = signatureInput ?? ledgerFileSignature(this.root, files);
     const observations: UsageObservation[] = [];
     let malformedLines = 0;
     const malformedFiles = new Set<string>();
-    let storageBytes = 0;
+    let readFailures = false;
+    const storageBytes = files.reduce((sum, file) => sum + file.size, 0);
     for (const file of files) {
       try {
-        const [content, info] = await Promise.all([readFile(file, 'utf8'), stat(file)]);
-        storageBytes += info.size;
+        const content = await readFile(file.path, 'utf8');
         for (const line of content.split(/\r?\n/)) {
           if (!line.trim()) continue;
           try {
@@ -149,30 +163,55 @@ export class LocalUsageLedger {
             if (isUsageObservation(parsed)) observations.push(parsed);
             else {
               malformedLines += 1;
-              malformedFiles.add(relative(this.root, file));
+              malformedFiles.add(relative(this.root, file.path));
             }
           } catch {
             malformedLines += 1;
-            malformedFiles.add(relative(this.root, file));
+            malformedFiles.add(relative(this.root, file.path));
           }
         }
       } catch {
         malformedLines += 1;
-        malformedFiles.add(relative(this.root, file));
+        readFailures = true;
+        malformedFiles.add(relative(this.root, file.path));
       }
     }
     return {
       observations,
+      signature,
       fileCount: files.length,
       storageBytes,
       malformedLines,
       malformedFiles: [...malformedFiles].sort(),
+      readFailures,
     };
   }
 }
 
-async function listJsonlFiles(root: string): Promise<string[]> {
-  const result: string[] = [];
+function materializeRead(read: LedgerReadResult): MaterializedLedgerSnapshot {
+  const materialized = materializeUsageObservations(read.observations);
+  const records = materialized.records;
+  return {
+    records,
+    diagnostics: {
+      schemaVersion: 1,
+      observationCount: materialized.uniqueObservationCount,
+      recordCount: records.length,
+      fileCount: read.fileCount,
+      storageBytes: read.storageBytes,
+      malformedLines: read.malformedLines,
+      malformedFiles: read.malformedFiles,
+      duplicateObservations: materialized.duplicateObservations,
+      conflictingRecords: records.filter((record) => record.conflictFields.length > 0).length,
+      oldestAt: records.at(-1)?.occurredAt,
+      newestAt: records[0]?.occurredAt,
+      retention: 'until-cleared',
+    },
+  };
+}
+
+async function listJsonlFileInfo(root: string): Promise<LedgerFileInfo[]> {
+  const result: LedgerFileInfo[] = [];
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -181,10 +220,25 @@ async function listJsonlFiles(root: string): Promise<string[]> {
   }
   for (const entry of entries) {
     const path = join(root, entry.name);
-    if (entry.isDirectory()) result.push(...await listJsonlFiles(path));
-    else if (entry.isFile() && entry.name.endsWith('.jsonl')) result.push(path);
+    if (entry.isDirectory()) result.push(...await listJsonlFileInfo(path));
+    else if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+      try {
+        const info = await stat(path);
+        result.push({ path, size: info.size, modifiedMs: info.mtimeMs });
+      } catch {
+        // A concurrent clear/rotation will change the next signature and retry.
+      }
+    }
   }
-  return result.sort();
+  return result.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function ledgerFileSignature(root: string, files: readonly LedgerFileInfo[]): string {
+  return JSON.stringify(files.map((file) => [
+    relative(root, file.path),
+    file.modifiedMs,
+    file.size,
+  ]));
 }
 
 function safeSegment(value: string): string {

@@ -5,7 +5,7 @@ import { fmtNum, fmtUsd } from '../format';
 import { Tip } from './Tip';
 
 /**
- * Total cost, anchored on MEASURED units: tokens and Copilot credits (AICs) are
+ * Usage and cost, anchored on MEASURED units: tokens and Copilot credits (AICs) are
  * what Copilot meters; dollars are a derived estimate. A scope selector lets the
  * user read the same three figures for the whole WORKSPACE, just THIS CHAT, or
  * TODAY. Under each figure we show the last turn's delta so movement is visible.
@@ -22,7 +22,7 @@ const SCOPES: { key: Scope; label: string; tip: string }[] = [
   {
     key: 'today',
     label: 'Today',
-    tip: "Metered totals for turns dated today, across all of this workspace's chats.",
+    tip: "Metered totals for your local calendar day, across all of this workspace's chats.",
   },
 ];
 
@@ -77,29 +77,30 @@ export function ImpactTrio({
   const dTokens = deltaInScope ? f?.realLastTotalTokens : undefined;
   const dCredits = deltaInScope ? f?.realLastCredits : undefined;
   const dCost = deltaInScope ? f?.realLastCostUsd : undefined;
+  const hasDelta = dTokens != null || dCredits != null || dCost != null;
 
   const tiles = [
     {
       key: 'tokens',
-      label: picked.tokensPartial ? 'Measured tokens' : 'Tokens',
+      label: picked.tokensPartial ? 'Known tokens' : 'Tokens',
       value: fmtNum(picked.tokens),
-      delta: dTokens != null ? `▲ ${fmtNum(dTokens)}` : '',
+      delta: dTokens != null ? `+ ${fmtNum(dTokens)}` : '',
       tip: picked.tokensPartial
-        ? 'Known metered token minimum for this scope. Copilot omitted input or output metering on at least one completed request; the available direction is still included.'
-        : 'Total input + output tokens Copilot metered for this scope. Input includes the whole re-sent context (system, tools, history, your message).',
+        ? 'Known token minimum. At least one completed turn is missing input or output metering; available directions are still included.'
+        : 'Measured input + output tokens for this scope. Input includes the full re-sent context.',
     },
     {
       key: 'credits',
-      label: picked.creditsEstimated ? 'AICs (est.)' : 'AICs',
+      label: picked.creditsEstimated ? 'AI credits (est.)' : 'AI credits',
       value: fmtNum(picked.credits),
-      delta: dCredits != null ? `▲ ${fmtNum(dCredits)}` : '',
-      tip: 'Copilot AI credits (AICs) — the unit GitHub Copilot actually bills in — metered for this scope. “(est.)” means credits were estimated because Copilot hasn’t written the real figure yet.',
+      delta: dCredits != null ? `+ ${fmtNum(dCredits)}` : '',
+      tip: 'GitHub Copilot AI credits (AICs), its native charge unit. “(est.)” means at least one credit value was inferred because the source did not persist it.',
     },
     {
       key: 'cost',
-      label: hasUsdRate ? picked.costPartial ? 'Known cost' : 'Cost (est.)' : 'Cost',
+      label: hasUsdRate ? picked.costPartial ? 'Known cost' : 'Estimated cost' : 'Cost not set',
       value: hasUsdRate && picked.cost != null ? fmtUsd(picked.cost) : '—',
-      delta: hasUsdRate && dCost != null ? `▲ ${fmtUsd(dCost)}` : '',
+      delta: hasUsdRate && dCost != null ? `+ ${fmtUsd(dCost)}` : '',
       tip: picked.costPartial
         ? 'Known cost from available measured token or credit inputs. Missing source meters are excluded and shown in Overview coverage.'
         : 'Estimated $ uses your blended $/million-token rate, not per-model pricing. The default is illustrative and will not match every plan, model, or cache mix. Set tokenlens.impact.usdPerMillionTokens to your effective rate, or set it to 0 to use tokenlens.impact.usdPerCredit.',
@@ -141,9 +142,9 @@ export function ImpactTrio({
         <Tip
           text={`${activeTip} Displayed dollars use your configured blended rate; actual billing varies by model, plan, and cache mix.`}
         >
-          <span class="section-title" role="heading" aria-level={2}>Total cost</span>
+          <span class="section-title" role="heading" aria-level={2}>Usage &amp; cost</span>
         </Tip>
-        <span class="impact-hint">▲ last metered turn</span>
+        {hasDelta && <span class="impact-hint">+ latest measured turn</span>}
       </header>
       <div class="impact-scope" role="tablist" aria-label="Cost scope">
         {SCOPES.map((s, index) => (

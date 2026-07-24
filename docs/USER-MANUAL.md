@@ -1,6 +1,6 @@
 # Token Lens user manual
 
-_Last updated for Token Lens 0.8.4, July 19, 2026._
+_Last updated for Token Lens 0.8.6, July 23, 2026._
 
 Token Lens combines two local views:
 
@@ -8,7 +8,7 @@ Token Lens combines two local views:
 2. **A durable personal usage ledger** containing content-free metadata retained
    on this machine until explicitly cleared.
 
-GitHub Copilot Chat is the only source adapter in 0.8.4. Future AI applications
+GitHub Copilot Chat is the only source adapter in 0.8.6. Future AI applications
 can implement the same ledger contract, but they are not currently measured.
 
 ## Quick start
@@ -30,19 +30,19 @@ can implement the same ledger contract, but they are not currently measured.
 
 The primary real-time surface.
 
-- **Next-turn forecast** compares the latest fully metered input with the next
-  expected input. It also shows a prediction range and measured historical
-  accuracy when enough real turns are available.
+- **Next-turn forecast** compares the latest measured input with estimated input for
+  the current or next turn. It also shows a likely range, historical median
+  error, and range coverage when enough measured turns are available.
 - **Context weight** shows context currently carried in the chat relative to the
   source-reported model limit. Every subsequent turn resends that context. A
   sharp drop indicates Copilot summarization/reset.
 - **Where tokens go** shows the input categories Copilot reports, such as system
   instructions, tool definitions/results, history/messages, and files. These are
   request-level categories, not exact per-MCP token splits.
-- **Total cost** switches between workspace, active chat, and today. It shows
-  known tokens, Copilot AICs, and a dollar estimate using the configured local
+- **Usage & cost** switches between workspace, active chat, and today. It shows
+  known tokens, Copilot AI credits, and a dollar estimate using the configured local
   rate.
-- **Live Copilot data** shows model and reasoning effort only when the source
+- **Current model** shows model, reasoning effort, and context limit only when the source
   records them.
 
 ### Overview
@@ -74,14 +74,14 @@ Transient active-chat detail:
 Prompt excerpts in Turns are read from the active source and held in memory.
 They are not persisted to the local ledger and are not exported.
 
-### Profiles
+### Workflows
 
-Optional advanced attribution. Profiles label whole requests using explicit
-workflow evidence and participating tool groups. They do not alter immutable
-ledger facts and cannot produce exact per-MCP token splits.
+Optional advanced attribution. Workflow profiles classify whole requests using
+explicit workflow evidence and participating tool groups. They do not rewrite
+source usage and cannot produce exact per-MCP token splits.
 
 Built-ins include FD&E HQ and All MCP tools. Custom groups can be configured in
-settings. Profiles are off by default and are not required for core usage.
+settings. Workflow attribution is off by default and is not required for core usage.
 
 ### Info
 
@@ -94,13 +94,13 @@ Advanced, or Deferred.
 | --- | --- |
 | **Metered** | Written by the source application. |
 | **Predicted / est.** | Computed locally, not provider metering. |
-| **Input measured / output measured** | The request completed, but the source persisted only that token direction. |
-| **In flight** | A recent request exists and source metering has not finished. |
+| **Input only / output only** | The request completed, but the source persisted only that token direction. |
+| **Pending** | Copilot is still processing the current request or has not written usage yet. |
 | **Usage unavailable** | The request completed, but the source did not persist a usable token meter. |
 | **Known cost** | Cost includes only the independently measured directions or configured allocations available. |
 | **Cost (est.)** | Known units multiplied by the locally configured rate. |
 | **Unpriced** | Activity exists but no defensible external allocation rate is configured. |
-| **AIC** | Copilot AI Credit, retained as the provider-native charge unit. |
+| **AI credit (AIC)** | GitHub Copilot's provider-native charge unit. |
 
 ## Controls and commands
 
@@ -141,8 +141,8 @@ Advanced, or Deferred.
 | `tokenlens.capture.scope` | `window` | Keep normal live capture isolated to the current workspace. |
 | `tokenlens.impact.usdPerMillionTokens` | `0.58` | Preferred local dollar projection per million known tokens. |
 | `tokenlens.impact.usdPerCredit` | `0` | Fallback dollar projection per Copilot AIC when token rate is zero. |
-| `tokenlens.businessTools.enabled` | `false` | Enable optional Profile attribution. |
-| `tokenlens.businessTools.enabledGroups` | `[]` | Selected built-in/custom profiles. |
+| `tokenlens.businessTools.enabled` | `false` | Enable optional workflow attribution. |
+| `tokenlens.businessTools.enabledGroups` | `[]` | Selected built-in/custom workflow profiles. |
 | `tokenlens.businessTools.customGroups` | `{}` | Advanced custom workflow/tool matching. |
 | `tokenlens.businessTools.rates` | `{}` | Optional external allocation assumptions. |
 
@@ -170,7 +170,7 @@ view, or cloud sync.
 
 - Exact tokens per individual MCP call are unavailable because current Copilot
   tool events contain no per-call token meter.
-- Agency Copilot CLI and Microsoft Scout are not adapters in 0.8.4.
+- Agency Copilot CLI and Microsoft Scout are not adapters in 0.8.6.
 - Visual Studio, JetBrains, and other assistants are not measured.
 - Some completed requests expose only input or output metering; Token Lens keeps
   the available direction and labels the result partial.
@@ -193,7 +193,7 @@ view, or cloud sync.
 
 ### Useful secondary
 
-- Forecast accuracy and the experimental reset-zone indicator. It is a proximity
+- Historical forecast error and the experimental context-limit warning. It is a proximity
   hint, not reliable prediction of every Copilot summarization.
 - Pin/unpin.
 - Configurable cost basis.
@@ -201,7 +201,7 @@ view, or cloud sync.
 
 ### Advanced / support
 
-- Profiles and external allocations.
+- Workflow attribution and configured tool costs.
 - Custom group JSON configuration.
 - Clear/rebuild.
 - Diagnostics and self-test.
@@ -224,6 +224,6 @@ view, or cloud sync.
 4. Switch to **Overview** and show Today/30 days, model/project drivers, and
    source health.
 5. Briefly show **Turns** as proof of per-turn tracking.
-6. Keep Profiles, export, clear/rebuild, and diagnostics for Q&A.
+6. Keep Workflows, export, clear/rebuild, and diagnostics for Q&A.
 
 Use measured data. Do not present preview fixture numbers as real usage.

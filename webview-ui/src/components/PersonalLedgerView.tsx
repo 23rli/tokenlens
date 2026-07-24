@@ -20,17 +20,28 @@ const RANGES: { key: LedgerTimeRange; label: string }[] = [
 
 export function PersonalLedgerView({
   overview,
+  error,
   busy,
 }: {
   overview?: PersonalLedgerOverview;
+  error?: string;
   busy: boolean;
 }) {
   const [range, setRange] = useState<LedgerTimeRange>('30d');
   const rangeRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  if (!overview?.ready) {
+  if (!overview?.ready && !error) {
     return (
       <section class="card ledger-empty muted">
         Initializing the local metadata ledger…
+      </section>
+    );
+  }
+
+  if (!overview?.ready) {
+    return (
+      <section class="card ledger-empty status-error" role="alert">
+        <strong>Saved usage is unavailable</strong>
+        <span>{error}</span>
       </section>
     );
   }
@@ -53,6 +64,11 @@ export function PersonalLedgerView({
   };
   return (
     <div class="ledger-view">
+      {error && (
+        <div class="status-banner status-error" role="alert">
+          {error} Showing the last successful snapshot.
+        </div>
+      )}
       <section class="card ledger-hero">
         <div class="ledger-head">
           <div>
@@ -61,7 +77,7 @@ export function PersonalLedgerView({
           </div>
           <div class="ledger-head-actions">
             <span class={`ledger-health${sourceReady ? ' ready' : ''}`}>
-              {sourceReady ? 'synced' : overview.sources[0]?.status ?? 'local'}
+              {sourceReady ? 'local ready' : overview.sources[0]?.status ?? 'local'}
             </span>
             <button
               class="ledger-export"
@@ -84,6 +100,7 @@ export function PersonalLedgerView({
               aria-controls="ledger-summary-panel"
               tabIndex={range === item.key ? 0 : -1}
               class={`ledger-range${range === item.key ? ' active' : ''}`}
+              title={item.key === 'today' ? 'Your local calendar day' : undefined}
               onClick={() => setRange(item.key)}
               onKeyDown={onRangeKeyDown}
             >
@@ -98,7 +115,7 @@ export function PersonalLedgerView({
         >
           {summary.records === 0 ? (
             <p class="ledger-zero muted">
-              No durable usage observations in this range. Send a Copilot Chat request and let it finish.
+              No saved usage in this range yet. Finish a Copilot Chat turn and it should appear within a few seconds.
             </p>
           ) : (
             <LedgerTotals summary={summary} />
@@ -132,8 +149,8 @@ export function PersonalLedgerView({
             </div>
             <div class="ledger-source-meta">
               <span>{source.sessionCount} chats</span>
-              <span>{source.capabilities.tokens ? 'tokens' : 'no tokens'}</span>
-              <span>{source.capabilities.perToolTokens ? 'per-tool meter' : 'no per-tool meter'}</span>
+              <span>{source.capabilities.tokens ? 'token meter' : 'no token meter'}</span>
+              <span>{source.capabilities.perToolTokens ? 'per-tool tokens' : 'request-level tokens'}</span>
             </div>
           </div>
         ))}
@@ -165,14 +182,14 @@ export function PersonalLedgerView({
       <section class="card ledger-foot">
         <div>
           <strong>{fmtNum(overview.diagnostics.recordCount)}</strong>
-          <span>records</span>
+          <span>usage records</span>
         </div>
         <div>
           <strong>{formatBytes(overview.diagnostics.storageBytes)}</strong>
           <span>local storage</span>
         </div>
         <div>
-          <strong>{overview.diagnostics.retention === 'until-cleared' ? 'Manual' : 'Policy'}</strong>
+          <strong>{overview.diagnostics.retention === 'until-cleared' ? 'Until cleared' : 'By policy'}</strong>
           <span>retention</span>
         </div>
         {(overview.diagnostics.malformedLines > 0 || overview.diagnostics.conflictingRecords > 0) && (
@@ -193,15 +210,15 @@ function LedgerTotals({ summary }: { summary: PersonalLedgerScopeSummary }) {
     <div class="ledger-totals">
       <div>
         <strong>{fmtNum(summary.totalTokens)}</strong>
-        <span>{summary.tokensPartial ? 'Measured tokens' : 'Tokens'}</span>
+        <span>{summary.tokensPartial ? 'Known tokens' : 'Tokens'}</span>
       </div>
       <div>
         <strong>{fmtNum(summary.nativeCredits)}</strong>
-        <span>{summary.creditsEstimated ? 'AICs (mixed)' : 'Copilot AICs'}</span>
+        <span>{summary.creditsEstimated ? 'AI credits (est.)' : 'AI credits'}</span>
       </div>
       <div>
         <strong>{cost}</strong>
-        <span>{summary.costPartial ? 'Known cost' : summary.costBasis === 'tokens' ? 'Token-rate cost' : summary.costBasis === 'copilot-aic' ? 'AIC-rate cost' : 'Cost not set'}</span>
+        <span>{summary.costPartial ? 'Known cost' : summary.costBasis === 'tokens' ? 'Estimated token-rate cost' : summary.costBasis === 'copilot-aic' ? 'Estimated credit-rate cost' : 'Cost not set'}</span>
       </div>
     </div>
   );
@@ -221,14 +238,14 @@ function CoverageCard({ summary }: { summary: PersonalLedgerScopeSummary }) {
         <span style={{ width: `${measured}%` }} />
       </div>
       <div class="ledger-coverage-meta">
-        <span>{summary.fullyMeteredRecords} full</span>
-        {summary.inputOnlyRecords > 0 && <span>{summary.inputOnlyRecords} input measured</span>}
-        {summary.outputOnlyRecords > 0 && <span>{summary.outputOnlyRecords} output measured</span>}
-        {summary.pendingRecords > 0 && <span>{summary.pendingRecords} in flight</span>}
+        <span>{summary.fullyMeteredRecords} complete</span>
+        {summary.inputOnlyRecords > 0 && <span>{summary.inputOnlyRecords} input only</span>}
+        {summary.outputOnlyRecords > 0 && <span>{summary.outputOnlyRecords} output only</span>}
+        {summary.pendingRecords > 0 && <span>{summary.pendingRecords} pending</span>}
         {summary.unavailableRecords > 0 && <span>{summary.unavailableRecords} usage unavailable</span>}
       </div>
       <p class="ledger-note">
-        Totals sum only measured directions. Missing source meters are listed above, not presented as pending.
+        Known totals include only token directions Copilot persisted. Missing usage is listed, never treated as zero.
       </p>
     </section>
   );
@@ -240,7 +257,7 @@ function BreakdownCard({ title, rows }: { title: string; rows: LedgerBreakdownRo
     <section class="card ledger-breakdown">
       <div class="ledger-section-head">
         <span class="section-title" role="heading" aria-level={2}>{title}</span>
-        <span class="ledger-muted">by known tokens</span>
+        <span class="ledger-muted">ranked by known tokens</span>
       </div>
       <div class="ledger-breakdown-list">
         {rows.slice(0, 6).map((row) => (
@@ -267,20 +284,20 @@ function BreakdownCard({ title, rows }: { title: string; rows: LedgerBreakdownRo
 function meteringLabel(status: UsageMeteringStatus): string {
   switch (status) {
     case 'metered': return 'fully metered';
-    case 'input-only': return 'input measured';
-    case 'output-only': return 'output measured';
-    case 'pending': return 'in flight';
+    case 'input-only': return 'input only';
+    case 'output-only': return 'output only';
+    case 'pending': return 'pending';
     case 'unavailable': return 'usage unavailable';
   }
 }
 
 function coverageLabel(coverage: MeteringCoverageCounts): string {
   const gaps = coverage.inputOnly + coverage.outputOnly + coverage.pending + coverage.unavailable;
-  if (gaps === 0) return 'fully metered';
+  if (gaps === 0) return 'complete';
   const parts: string[] = [];
-  if (coverage.inputOnly) parts.push(`${coverage.inputOnly} input-only`);
-  if (coverage.outputOnly) parts.push(`${coverage.outputOnly} output-only`);
-  if (coverage.pending) parts.push(`${coverage.pending} in flight`);
+  if (coverage.inputOnly) parts.push(`${coverage.inputOnly} input only`);
+  if (coverage.outputOnly) parts.push(`${coverage.outputOnly} output only`);
+  if (coverage.pending) parts.push(`${coverage.pending} pending`);
   if (coverage.unavailable) parts.push(`${coverage.unavailable} unavailable`);
   return parts.join(' · ');
 }

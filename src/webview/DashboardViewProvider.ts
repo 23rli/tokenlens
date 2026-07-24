@@ -20,6 +20,7 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider, vscode
   private view?: vscode.WebviewView;
   private readonly storeSubscription: vscode.Disposable;
   private viewSubscriptions: vscode.Disposable[] = [];
+  private refreshTimer?: ReturnType<typeof setTimeout>;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -51,8 +52,8 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider, vscode
     this.viewSubscriptions.push(
       view.onDidChangeVisibility(() => {
         if (view.visible) {
-          this.handlers.refresh();
           this.post({ type: 'state', state: this.store.getState() });
+          this.scheduleRefresh(view);
         }
       }),
       view.onDidDispose(() => {
@@ -66,8 +67,8 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider, vscode
     if (!msg || typeof msg !== 'object' || typeof msg.type !== 'string') return;
     switch (msg.type) {
       case 'ready':
-        this.handlers.refresh();
         this.post({ type: 'state', state: this.store.getState() });
+        this.scheduleRefresh(this.view);
         break;
       case 'toggleCapture':
         this.post({ type: 'busy', busy: true });
@@ -108,14 +109,31 @@ export class DashboardViewProvider implements vscode.WebviewViewProvider, vscode
     void this.view?.webview.postMessage(message);
   }
 
+  /** Mark a successful no-change source check without resending the full state. */
+  heartbeat(): void {
+    this.post({ type: 'heartbeat' });
+  }
+
   dispose(): void {
+    this.view = undefined;
     this.disposeViewSubscriptions();
     this.storeSubscription.dispose();
   }
 
   private disposeViewSubscriptions(): void {
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = undefined;
     const subscriptions = this.viewSubscriptions;
     this.viewSubscriptions = [];
     for (const subscription of subscriptions) subscription.dispose();
+  }
+
+  private scheduleRefresh(view: vscode.WebviewView | undefined): void {
+    if (!view) return;
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      if (this.view === view && view.visible) this.handlers.refresh();
+    }, 0);
   }
 }

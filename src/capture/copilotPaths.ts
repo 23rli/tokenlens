@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { existsSync, readdirSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 
 export interface CopilotSessionPaths {
   sessionId: string;
@@ -10,6 +10,12 @@ export interface CopilotSessionPaths {
   chatSessionPath?: string;
   modelsJsonPath?: string;
   modifiedMs: number;
+  /** Combined source bytes distinguish rapid appends on coarse-mtime filesystems. */
+  sourceBytes?: number;
+  /** Per-file source metadata avoids collisions hidden by max-mtime + total-size. */
+  sourceSignature?: string;
+  /** Workspace metadata affects ledger projection (project alias), not chat content. */
+  workspaceSignature?: string;
 }
 
 /** Root of VS Code per-workspace storage (stable build). Override via env or arg. */
@@ -40,17 +46,31 @@ function safeReaddir(dir: string): string[] {
   }
 }
 
-function safeMtime(p: string): number {
+interface SourceFileStat {
+  mtimeMs: number;
+  size: number;
+}
+
+function safeStat(p: string): SourceFileStat | undefined {
   try {
-    return statSync(p).mtimeMs;
+    const stat = statSync(p);
+    return stat.isFile() ? { mtimeMs: stat.mtimeMs, size: stat.size } : undefined;
   } catch {
-    return 0;
+    return undefined;
   }
 }
 
-function findModelsJson(root: string, hash: string, sessionId: string): string | undefined {
-  const p = join(root, hash, 'GitHub.copilot-chat', 'debug-logs', sessionId, 'models.json');
-  return existsSync(p) ? p : undefined;
+/** One canonical signature shared by every reader/projection cache. */
+export function copilotSessionSourceSignature(paths: CopilotSessionPaths): string {
+  return paths.sourceSignature ?? `${paths.modifiedMs}:${paths.sourceBytes ?? 'unknown'}`;
+}
+
+/** Source plus workspace metadata used by content-free ledger projections. */
+export function copilotSessionProjectionSignature(paths: CopilotSessionPaths): string {
+  return JSON.stringify([
+    copilotSessionSourceSignature(paths),
+    paths.workspaceSignature ?? 'unknown-workspace-metadata',
+  ]);
 }
 
 /** Enumerate all Copilot chat sessions on disk, newest source file first. */
@@ -59,12 +79,15 @@ export function listCopilotSessions(
   onlyHash?: string,
 ): CopilotSessionPaths[] {
   const sessions: CopilotSessionPaths[] = [];
-  if (!existsSync(root)) return sessions;
 
-  for (const hash of safeReaddir(root)) {
-    if (onlyHash && hash !== onlyHash) continue;
+  const hashes = onlyHash ? [onlyHash] : safeReaddir(root);
+  for (const hash of hashes) {
     const transcriptsDir = join(root, hash, 'GitHub.copilot-chat', 'transcripts');
     const chatSessionsDir = join(root, hash, 'chatSessions');
+    const workspaceStat = safeStat(join(root, hash, 'workspace.json'));
+    const workspaceSignature = workspaceStat
+      ? JSON.stringify([workspaceStat.mtimeMs, workspaceStat.size])
+      : undefined;
     const files = new Set([
       ...safeReaddir(transcriptsDir),
       ...safeReaddir(chatSessionsDir),
@@ -75,25 +98,40 @@ export function listCopilotSessions(
       const sessionId = file.replace(/\.jsonl$/, '');
       const transcriptPath = join(transcriptsDir, file);
       const chatSessionPath = join(chatSessionsDir, file);
-      const hasTranscript = existsSync(transcriptPath);
-      const hasChatSession = existsSync(chatSessionPath);
-      if (!hasTranscript && !hasChatSession) continue;
-      const modelsJsonPath = findModelsJson(root, hash, sessionId);
+      const transcriptStat = safeStat(transcriptPath);
+      const chatSessionStat = safeStat(chatSessionPath);
+      if (!transcriptStat && !chatSessionStat) continue;
+      const modelsCandidate = join(
+        root,
+        hash,
+        'GitHub.copilot-chat',
+        'debug-logs',
+        sessionId,
+        'models.json',
+      );
+      const modelsStat = safeStat(modelsCandidate);
+      const modelsJsonPath = modelsStat ? modelsCandidate : undefined;
+      const sourceStats = [transcriptStat, chatSessionStat, modelsStat];
       sessions.push({
         sessionId,
         workspaceHash: hash,
-        transcriptPath: hasTranscript ? transcriptPath : undefined,
-        chatSessionPath: hasChatSession ? chatSessionPath : undefined,
+        transcriptPath: transcriptStat ? transcriptPath : undefined,
+        chatSessionPath: chatSessionStat ? chatSessionPath : undefined,
         modelsJsonPath,
-        modifiedMs: Math.max(
-          hasTranscript ? safeMtime(transcriptPath) : 0,
-          hasChatSession ? safeMtime(chatSessionPath) : 0,
-          modelsJsonPath ? safeMtime(modelsJsonPath) : 0,
-        ),
+        modifiedMs: Math.max(...sourceStats.map((source) => source?.mtimeMs ?? 0)),
+        sourceBytes: sourceStats.reduce((sum, source) => sum + (source?.size ?? 0), 0),
+        sourceSignature: JSON.stringify(sourceStats.map((source) =>
+          source ? [source.mtimeMs, source.size] : null,
+        )),
+        workspaceSignature,
       });
     }
   }
-  return sessions.sort((a, b) => b.modifiedMs - a.modifiedMs);
+  return sessions.sort((a, b) =>
+    b.modifiedMs - a.modifiedMs ||
+    a.workspaceHash.localeCompare(b.workspaceHash) ||
+    a.sessionId.localeCompare(b.sessionId),
+  );
 }
 
 /** The most recently active Copilot chat session, if any. */

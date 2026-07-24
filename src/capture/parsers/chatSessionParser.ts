@@ -1,13 +1,11 @@
 import type { ModelInfo } from '@tokentama/shared-types';
 import type { ParsedChatSession, ParsedChatRequest } from './types';
+import {
+  parseChatSessionLines,
+  type ChatSessionLine,
+} from './chatSessionLines';
 
-interface ChatLine {
-  kind?: number;
-  k?: (string | number)[];
-  v?: any;
-}
-
-function applyChatLine(state: any, parsed: ChatLine): any {
+function applyChatLine(state: any, parsed: ChatSessionLine): any {
   if (parsed.kind === 0) return parsed.v ?? {};
   if ((parsed.kind !== 1 && parsed.kind !== 2) || !parsed.k) return state;
   // New requests are emitted as kind:2 appends at ["requests"]. Assignment
@@ -73,17 +71,13 @@ function promptFromRequest(req: any): string {
  * model. Reconstructs state from the kind:0 snapshot and kind:1/kind:2 patches.
  * Schema confirmed against the live session (design research).
  */
-export function parseChatSession(content: string): ParsedChatSession {
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+export function parseChatSession(
+  content: string,
+  lines = parseChatSessionLines(content),
+): ParsedChatSession {
   let state: any = {};
 
-  for (const line of lines) {
-    let parsed: ChatLine;
-    try {
-      parsed = JSON.parse(line) as ChatLine;
-    } catch {
-      continue;
-    }
+  for (const parsed of lines) {
     try {
       state = applyChatLine(state, parsed);
     } catch {
@@ -169,14 +163,7 @@ function normalizeRequestTimestamp(value: unknown): string | undefined {
  */
 export function parseEarlyPrompts(content: string): Map<number, string> {
   const byIndex = new Map<number, string>();
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  for (const line of lines) {
-    let parsed: ChatLine;
-    try {
-      parsed = JSON.parse(line) as ChatLine;
-    } catch {
-      continue;
-    }
+  for (const parsed of parseChatSessionLines(content)) {
     if (parsed.kind !== 0) continue;
     const requests = (parsed.v as { requests?: unknown })?.requests;
     if (!Array.isArray(requests)) continue;
@@ -193,14 +180,7 @@ export function parseEarlyPrompts(content: string): Map<number, string> {
 export function parseChatSessionRequestIds(content: string): Map<number, string> {
   const byIndex = new Map<number, string>();
   let requestCount = 0;
-  const lines = content.split(/\r?\n/).filter((line) => line.trim().length > 0);
-  for (const line of lines) {
-    let parsed: ChatLine;
-    try {
-      parsed = JSON.parse(line) as ChatLine;
-    } catch {
-      continue;
-    }
+  for (const parsed of parseChatSessionLines(content)) {
     if (parsed.kind === 0) {
       const requests = (parsed.v as { requests?: unknown })?.requests;
       if (!Array.isArray(requests)) continue;

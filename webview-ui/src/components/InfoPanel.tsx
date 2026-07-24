@@ -3,51 +3,52 @@ export function InfoPanel() {
   return (
     <div class="info info-manual">
       <section class="card info-card info-start">
-        <span class="section-title" role="heading" aria-level={2}>Token Lens manual</span>
+        <span class="section-title" role="heading" aria-level={2}>How Token Lens works</span>
         <p class="info-lead">
-          Token Lens is a private local ledger plus a live GitHub Copilot meter. Start on
-          <b> Live</b> for the current chat, then use <b>Overview</b> for durable personal history.
+          Token Lens shows live usage for your current Copilot chat and keeps a private,
+          metadata-only history on this machine.
         </p>
         <ol class="info-steps">
           <li>Send a Copilot Chat request and let it finish.</li>
-          <li>Open <b>Live</b> to see the last measured turn, next-turn forecast, and context load.</li>
-          <li>Open <b>Overview</b> to compare usage over Today, 7 days, 30 days, or All.</li>
+          <li>Use <b>Live</b> for the current chat, forecast, and context.</li>
+          <li>Use <b>Overview</b> for saved usage across time, models, and projects.</li>
         </ol>
       </section>
 
       <details class="card info-card info-fold" open>
         <summary>What each tab is for</summary>
         <ul class="info-list">
-          <li><b>Live</b>: current Copilot chat, forecast, context weight, token categories, totals, and model.</li>
-          <li><b>Overview</b>: persistent metadata-only history by time, application, provider/model, and project, plus a collapsed cross-chat activity timeline and export.</li>
-          <li><b>Turns</b>: transient prompt excerpts and context deltas for only the active chat. Excerpts are not persisted or exported.</li>
-          <li><b>Profiles</b>: optional advanced attribution for selected workflows and toolsets. Not required for core tracking.</li>
-          <li><b>Info</b>: this manual and the product's measurement boundaries.</li>
+          <li><b>Live</b>: current chat, input forecast, context growth, token categories, usage, and model.</li>
+          <li><b>Overview</b>: saved metadata-only history by time, application, model, and project.</li>
+          <li><b>Turns</b>: temporary prompt excerpts and measured input changes for the active chat. Excerpts are never saved or exported.</li>
+          <li><b>Workflows</b>: optional request-level attribution using selected workflow and tool signals.</li>
+          <li><b>Info</b>: this guide and Token Lens measurement boundaries.</li>
         </ul>
       </details>
 
-      <details class="card info-card info-fold" open>
+      <details class="card info-card info-fold">
         <summary>How to read the numbers</summary>
         <div class="info-definitions">
           <div><b>Metered</b><span>Written by the source application.</span></div>
-          <div><b>Predicted</b><span>Local next-turn forecast, always shown as estimated.</span></div>
-          <div><b>Cost (est.)</b><span>Known tokens or credits multiplied by your configured local rate.</span></div>
-          <div><b>Input measured</b><span>The request completed with only its input direction metered.</span></div>
-          <div><b>Output measured</b><span>The request completed with only its output direction metered.</span></div>
-          <div><b>In flight</b><span>One genuinely current unmatched request may appear while Copilot finishes writing it.</span></div>
+          <div><b>Estimated</b><span>Calculated locally; not provider metering or an invoice.</span></div>
+          <div><b>Known tokens</b><span>A measured minimum when Copilot omitted input or output for some turns.</span></div>
+          <div><b>AI credits</b><span>GitHub Copilot's native charge unit, also called AICs.</span></div>
+          <div><b>Input only</b><span>Copilot persisted input tokens but not output tokens.</span></div>
+          <div><b>Output only</b><span>Copilot persisted output tokens but not input tokens.</span></div>
+          <div><b>Pending</b><span>Copilot is still processing the current request or has not written usage yet.</span></div>
           <div><b>Usage unavailable</b><span>The request completed, but Copilot did not persist a usable token meter.</span></div>
-          <div><b>Unpriced</b><span>Activity was observed, but no defensible external rate is configured.</span></div>
+          <div><b>Unpriced</b><span>Activity was observed, but no tool-cost rate is configured.</span></div>
         </div>
       </details>
 
       <details class="card info-card info-fold">
         <summary>Live cards</summary>
         <ul class="info-list">
-          <li><b>Next-turn forecast</b>: last real input versus the next expected input, range, and measured accuracy.</li>
-          <li><b>Context weight</b>: context currently re-sent on every turn, relative to the model limit. Drops indicate Copilot summarization.</li>
+          <li><b>Input forecast</b>: last measured input versus estimated input for the current or next turn, with a likely range and historical median error.</li>
+          <li><b>Context weight</b>: input context re-sent on every turn. Sharp drops usually indicate Copilot summarization.</li>
           <li><b>Where tokens go</b>: source-reported input categories such as system instructions, tool definitions/results, history, messages, and files.</li>
-          <li><b>Total cost</b>: known tokens, Copilot AICs, and configured dollar estimate for workspace, current chat, or today.</li>
-          <li><b>Live Copilot data</b>: model and reasoning effort only when the source records them.</li>
+          <li><b>Usage &amp; cost</b>: tokens, Copilot AI credits, and configured dollar estimate for workspace, current chat, or today.</li>
+          <li><b>Current model</b>: model, reasoning effort, and context limit when the source records them.</li>
         </ul>
       </details>
 
@@ -67,8 +68,8 @@ export function InfoPanel() {
         <summary>Core, advanced, and deferred</summary>
         <div class="info-status-list">
           <div><span class="info-status core">Core</span><p>Live forecast, context weight, token breakdown, measured totals, personal Overview, source health, Turns, and capture privacy control.</p></div>
-          <div><span class="info-status useful">Useful</span><p>Pin/unpin, manual export, configurable rates, forecast accuracy, and the experimental reset-zone indicator.</p></div>
-          <div><span class="info-status advanced">Advanced</span><p>Profiles, external allocations, custom tool groups, clear/rebuild, and diagnostics. Keep these out of the main pitch unless asked.</p></div>
+          <div><span class="info-status useful">Useful</span><p>Pin/unpin, manual export, configurable rates, historical forecast error, and the experimental context-limit warning.</p></div>
+          <div><span class="info-status advanced">Advanced</span><p>Workflow attribution, configured tool costs, custom groups, clear/rebuild, and diagnostics.</p></div>
           <div><span class="info-status defer">Deferred</span><p>Cloud sync, team dashboards, exact per-MCP token splits, Agency CLI/Scout metering, and invoice-grade external billing.</p></div>
         </div>
       </details>
@@ -77,10 +78,10 @@ export function InfoPanel() {
         <summary>Privacy and known limits</summary>
         <ul class="info-list">
           <li>Durable records exclude prompts, responses, code/documents, tool arguments, raw paths/session IDs, user IDs, and machine IDs.</li>
-          <li>GitHub Copilot Chat is the only source adapter in 0.8.3.</li>
+          <li>GitHub Copilot Chat in VS Code is currently the only source adapter.</li>
           <li>MCP calls are visible, but Copilot does not expose exact tokens per individual MCP call.</li>
           <li>Dollars are local projections unless a provider-native charge is available; they are not an invoice.</li>
-          <li>Profiles correlate whole requests with evidence. They do not prove causal per-tool spend.</li>
+          <li>Workflow attribution correlates whole requests with evidence. It does not prove causal per-tool spend.</li>
         </ul>
       </details>
     </div>

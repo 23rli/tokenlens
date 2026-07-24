@@ -79,6 +79,38 @@ describe('LocalUsageLedger', () => {
     await append;
     expect(snapshot.records).toHaveLength(1);
   });
+
+  it('reuses an unchanged materialization snapshot', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tokenlens-ledger-'));
+    tempDirs.push(dir);
+    const ledger = new LocalUsageLedger(dir);
+    await ledger.append([observation()]);
+
+    const first = await ledger.materialize();
+    const unchanged = await ledger.materialize();
+
+    expect(unchanged).toBe(first);
+  });
+
+  it('invalidates a cached snapshot when another writer partition changes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'tokenlens-ledger-'));
+    tempDirs.push(dir);
+    const first = new LocalUsageLedger(dir);
+    const second = new LocalUsageLedger(dir);
+    await first.append([observation()]);
+    const before = await first.materialize();
+
+    await second.append([observation({
+      sourceRecordId: 'record-2',
+      occurredAt: '2026-07-15T12:01:00.000Z',
+      observedAt: '2026-07-15T12:01:01.000Z',
+      interaction: { type: 'chat-turn', index: 1 },
+    })]);
+    const after = await first.materialize();
+
+    expect(after).not.toBe(before);
+    expect(after.records).toHaveLength(2);
+  });
 });
 
 async function findJsonl(root: string): Promise<string[]> {

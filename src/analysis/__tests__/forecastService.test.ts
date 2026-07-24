@@ -39,6 +39,21 @@ describe('ForecastService', () => {
     expect(svc.accuracy().samples).toBe(before); // accuracy is a model property, retained
   });
 
+  it('bounds retained history while continuing to score appended turns', () => {
+    const svc = new ForecastService({ maxHistory: 5, maxSamples: 20 });
+    for (let i = 0; i < 12; i++) {
+      svc.recordTurn({
+        promptTokens: 10_000 + i * 1_000,
+        completionTokens: 300,
+        promptText: `turn ${i}`,
+        toolCalls: 1,
+      });
+    }
+
+    expect(svc.turnCount).toBe(5);
+    expect(svc.accuracy().samples).toBeGreaterThan(5);
+  });
+
   it('uses the model limit for reset risk (model-agnostic)', () => {
     const svc = new ForecastService();
     // Climb near a small model's limit (~94% of 128k) → reset risk should light up.

@@ -11,6 +11,7 @@ export interface ForecastViewExtras {
   lastPromptPreview?: string;
   turnCount: number;
   contextSeries: number[];
+  contextSeriesStartTurn?: number;
   turnPrompts?: string[];
   realLastInputTokens?: number;
   realLastTotalTokens?: number;
@@ -24,6 +25,8 @@ export interface ForecastViewExtras {
   chatBreakdown?: ContextSlice[];
   chatInputTokens?: number;
   chatSessionCount?: number;
+  aggregateLoading?: boolean;
+  aggregateSessionsProcessed?: number;
   aggregateScope?: ForecastView['aggregateScope'];
   chatTotalTokens?: number;
   chatTokensPartial?: boolean;
@@ -44,12 +47,14 @@ export interface ForecastViewExtras {
   todayCostUsd?: number;
   todayCostPartial?: boolean;
   allTurns?: {
+    turn?: number;
     prompt: string;
     tokens: number;
     metered: boolean;
     partial?: boolean;
     status: UsageMeteringStatus;
   }[];
+  allTurnsTotal?: number;
 }
 
 /**
@@ -111,6 +116,7 @@ export function buildForecastView(
     lastPromptPreview: extras.lastPromptPreview,
     turnCount: extras.turnCount,
     contextSeries: extras.contextSeries,
+    contextSeriesStartTurn: extras.contextSeriesStartTurn,
     turnPrompts: extras.turnPrompts,
     contextBreakdown: extras.contextBreakdown,
     contextInputTokens: extras.contextInputTokens,
@@ -119,6 +125,8 @@ export function buildForecastView(
     chatBreakdown: extras.chatBreakdown,
     chatInputTokens: extras.chatInputTokens,
     chatSessionCount: extras.chatSessionCount,
+    aggregateLoading: extras.aggregateLoading,
+    aggregateSessionsProcessed: extras.aggregateSessionsProcessed,
     aggregateScope: extras.aggregateScope,
     chatTotalTokens: extras.chatTotalTokens,
     chatTokensPartial: extras.chatTokensPartial,
@@ -139,5 +147,6 @@ export function buildForecastView(
     todayCostUsd: extras.todayCostUsd,
     todayCostPartial: extras.todayCostPartial,
     allTurns: extras.allTurns,
+    allTurnsTotal: extras.allTurnsTotal,
   };
 }

@@ -5,15 +5,17 @@ import { Tip } from './Tip';
 /**
  * The chat header + the two headline numbers side by side: LAST TURN (the real
  * input tokens the previous turn cost) vs NEXT TURN (est.), plus a one-line
- * range and forecast accuracy. Always renders (skeleton before data).
+ * likely range and historical median error. Always renders (skeleton before data).
  */
 export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
   const f = forecast;
-  const name = f?.sessionTitle || (f?.sessionShortId ? `Chat ${f.sessionShortId}` : 'No active chat');
+  const name = f?.sessionTitle || (f?.sessionShortId ? `Chat ${f.sessionShortId}` : 'No active Copilot chat');
   const turns = f?.allTurns ?? [];
-  const liveTurn = turns.length || f?.turnCount || 0;
+  const liveTurn = visibleTurnCount(f);
   const pending = countInFlightTurns(turns);
   const estimatingPending = f?.forecastTarget === 'pending';
+  const medianError = f ? Math.max(0, Math.round(100 - f.accuracyScore)) : 0;
+  const rangeCoverage = f ? Math.round(f.intervalCoverage * 100) : 0;
 
   return (
     <>
@@ -28,6 +30,9 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
             </span>
           )}
         </div>
+        {!f && (
+          <p class="now-empty">Send a Copilot Chat message in this window to begin live tracking.</p>
+        )}
       </section>
 
       <section class="card next" aria-labelledby="forecast-heading">
@@ -36,8 +41,8 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
         </h2>
         <div class="next-cols">
           <div class="next-col">
-            <Tip text="The real input tokens your most recent METERED turn cost. A just-sent turn stays 'pending' until Copilot writes its real tokens.">
-              <span class="next-kicker">Last metered</span>
+            <Tip text="Measured input tokens for the latest completed turn. Input includes system instructions, tools, chat history, files, and your message.">
+              <span class="next-kicker">Latest input</span>
             </Tip>
             <span class={`next-number${f?.realLastInputTokens != null ? '' : ' muted'}`}>
               {f?.realLastInputTokens != null ? fmtNum(f.realLastInputTokens) : '—'}
@@ -45,8 +50,8 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
           </div>
           <div class="next-arrow">→</div>
           <div class="next-col">
-            <Tip text={estimatingPending ? "What the in-flight prompt is likely to cost once Copilot finishes metering it." : "What your next prompt will cost, predicted from your recent turns. It's driven by re-sent history and tool calls, not just your message length — fewer tool round-trips and a shorter chat cost less."}>
-              <span class="next-kicker">{estimatingPending ? 'Current turn (est.)' : 'Next turn (est.)'}</span>
+            <Tip text={estimatingPending ? "Estimated input for the turn Copilot is processing now. It becomes measured after Copilot writes its usage." : "Estimated input for your next turn, based on this chat's measured growth. Re-sent context usually matters more than message length."}>
+              <span class="next-kicker">{estimatingPending ? 'Current input (est.)' : 'Next input (est.)'}</span>
             </Tip>
             <span class={`next-number next-pred${f ? '' : ' muted'}`}>
               {f ? fmtNum(f.predictedInputTokens) : '—'}
@@ -58,29 +63,33 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
           {f ? (
             <>
               {f.predictedCredits != null && <>≈ {Math.round(f.predictedCredits).toLocaleString()} credits · </>}
-              range {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)} tokens
-              {f.confidence < 0.4 && <span class="next-hedge"> · low conf.</span>}
+              likely range {fmtNum(f.intervalLow)}–{fmtNum(f.intervalHigh)} tokens
+              {f.confidence < 0.4 && <span class="next-hedge"> · low confidence</span>}
             </>
           ) : (
-            'range —'
+            'likely range —'
           )}
         </div>
 
         {pending > 0 && (
           <div class="next-pending">
-            {pending} turn{pending > 1 ? 's' : ''} in flight — showing the current turn estimate until Copilot meters {pending > 1 ? 'them' : 'it'}.
+            Copilot is still processing {pending > 1 ? `${pending} turns` : 'this turn'}. Usage will switch from estimated to measured when available.
           </div>
         )}
 
         {f && f.accuracySamples > 0 && (
-          <div class="next-acc" title={`How close past predictions landed — median error on ${f.accuracySamples} of your turns`}>
-            <b class="next-acc-pct">{Math.round(f.accuracyScore)}%</b>
-            <span class="next-acc-note">forecast accuracy</span>
+          <div class="next-acc" title={`Median absolute error across ${f.accuracySamples} measured turns; ${rangeCoverage}% landed inside the predicted range.`}>
+            <b class="next-acc-pct">{medianError}%</b>
+            <span class="next-acc-note">
+              median error · {rangeCoverage}% in range · {f.accuracySamples} turn{f.accuracySamples === 1 ? '' : 's'}
+            </span>
           </div>
         )}
 
         {f?.resetRisk === 'high' && (
-          <div class="next-warn">Context is near a possible reset zone — summarization may drop the next turn sharply.</div>
+          <div class="next-warn">
+            This chat is close to its context limit. Copilot may summarize it soon, but the timing is uncertain.
+          </div>
         )}
       </section>
     </>
@@ -89,4 +98,8 @@ export function ForecastPanel({ forecast }: { forecast?: ForecastView }) {
 
 export function countInFlightTurns(turns: NonNullable<ForecastView['allTurns']>): number {
   return turns.filter((turn) => turn.status === 'pending').length;
+}
+
+export function visibleTurnCount(forecast?: ForecastView): number {
+  return forecast?.allTurnsTotal ?? forecast?.allTurns?.length ?? forecast?.turnCount ?? 0;
 }

@@ -26,6 +26,8 @@ export function App() {
       if (message.type === 'state') {
         setState(message.state);
         setLastUpdate(Date.now());
+      } else if (message.type === 'heartbeat') {
+        setLastUpdate(Date.now());
       } else if (message.type === 'busy') setBusy(message.busy);
     };
     window.addEventListener('message', onMessage);
@@ -119,7 +121,7 @@ export function App() {
           onClick={() => setTab('profiles')}
           onKeyDown={onTabKeyDown}
         >
-          Profiles
+          Workflows
         </button>
         <button
           ref={(el) => { tabRefs.current[4] = el; }}
@@ -135,6 +137,19 @@ export function App() {
           Info
         </button>
       </div>
+
+      {tab === 'live' && !state.captureEnabled ? (
+        <div class="status-banner status-paused" role="status">
+          Capture is paused. Live shows the last snapshot; saved Overview data stays available.
+        </div>
+      ) : tab === 'live' && state.forecast?.aggregateLoading ? (
+        <div class="status-banner status-loading" role="status" aria-live="polite">
+          Loading all-chat totals… {state.forecast.aggregateSessionsProcessed ?? 0}
+          {state.forecast.chatSessionCount
+            ? ` of ${state.forecast.chatSessionCount} chats`
+            : ''}
+        </div>
+      ) : null}
 
       {tab === 'live' ? (
         <div class="app-main" id="panel-live" role="tabpanel" aria-labelledby="tab-live">
@@ -155,7 +170,11 @@ export function App() {
         </div>
       ) : tab === 'overview' ? (
         <div class="app-main" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview">
-          <PersonalLedgerView overview={state.personalLedger} busy={busy} />
+          <PersonalLedgerView
+            overview={state.personalLedger}
+            error={state.personalLedgerError}
+            busy={busy}
+          />
         </div>
       ) : tab === 'history' ? (
         <div class="app-main" id="panel-history" role="tabpanel" aria-labelledby="tab-history">

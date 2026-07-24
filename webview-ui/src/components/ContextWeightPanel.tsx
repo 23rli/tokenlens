@@ -7,11 +7,11 @@ const BANDS: Record<
   ForecastView['contextBand'],
   { label: string; caption: string; color: string }
 > = {
-  light: { label: 'Light', caption: 'Plenty of headroom.', color: '#3fb950' },
-  moderate: { label: 'Moderate', caption: 'Building up.', color: '#57ab5a' },
-  heavy: { label: 'Heavy', caption: 'Costs climbing.', color: '#d29922' },
-  critical: { label: 'Critical', caption: 'Very heavy — consider a fresh chat.', color: '#f0883e' },
-  overloaded: { label: 'Overloaded', caption: 'Near a possible reset zone.', color: '#f85149' },
+  light: { label: 'Light', caption: 'Plenty of room.', color: '#3fb950' },
+  moderate: { label: 'Moderate', caption: 'Context is growing.', color: '#57ab5a' },
+  heavy: { label: 'Heavy', caption: 'A large input is re-sent each turn.', color: '#d29922' },
+  critical: { label: 'Near limit', caption: 'Consider a fresh chat for a new task.', color: '#f0883e' },
+  overloaded: { label: 'At limit', caption: 'Copilot may summarize this chat.', color: '#f85149' },
 };
 
 /**
@@ -25,6 +25,11 @@ export function ContextWeightPanel({ forecast }: { forecast?: ForecastView }) {
   const blown = f?.contextBand === 'overloaded';
   const series = f?.contextSeries ?? [];
   const prompts = f?.turnPrompts ?? [];
+  const turnRange = contextTurnRange(
+    series.length,
+    f?.contextSeriesStartTurn,
+    f?.turnCount,
+  );
   const peak = series.length ? Math.max(...series) : 1;
   const resets = series.reduce((n, v, i) => (i > 0 && v < series[i - 1] * 0.6 ? n + 1 : n), 0);
   const pct = f?.loadFraction != null ? Math.round(f.loadFraction * 100) : undefined;
@@ -34,17 +39,17 @@ export function ContextWeightPanel({ forecast }: { forecast?: ForecastView }) {
   const MAX_BARS = 44;
   const bars: { v: number; turn: number; prompt?: string }[] =
     series.length <= MAX_BARS
-      ? series.map((v, i) => ({ v, turn: i + 1, prompt: prompts[i] }))
+        ? series.map((v, i) => ({ v, turn: turnRange.start + i, prompt: prompts[i] }))
       : Array.from({ length: MAX_BARS }, (_, b) => {
           const idx = Math.min(series.length - 1, Math.floor(((b + 1) * series.length) / MAX_BARS) - 1);
-          return { v: series[idx], turn: idx + 1, prompt: prompts[idx] };
+          return { v: series[idx], turn: turnRange.start + idx, prompt: prompts[idx] };
         });
   const sampled = series.length > MAX_BARS;
 
   return (
     <section class={`card gauge${blown ? ' gauge-blown' : ''}`}>
       <header class="gauge-head">
-        <Tip text="Context loaded in this chat right now. Every turn re-sends this whole context, so each turn costs more as it grows — start a fresh chat for a new task to reset it (Copilot also auto-summarizes near the limit).">
+        <Tip text="Input context carried and re-sent on every turn. Sharp drops in the chart usually mean Copilot summarized the chat. Start a fresh chat for a new task to reduce carried context.">
           <span class="section-title" role="heading" aria-level={2}>Context weight</span>
         </Tip>
         <span class="gauge-band" style={{ color: f ? band.color : undefined }}>
@@ -54,7 +59,7 @@ export function ContextWeightPanel({ forecast }: { forecast?: ForecastView }) {
 
       <div class="gauge-loadrow">
         <span class={`gauge-load${f ? '' : ' muted'}`}>{f ? fmtNum(f.contextTokens) : '—'}</span>
-        <span class="gauge-load-unit">tokens carried</span>
+        <span class="gauge-load-unit">input tokens carried</span>
       </div>
 
       <div
@@ -75,14 +80,19 @@ export function ContextWeightPanel({ forecast }: { forecast?: ForecastView }) {
             <span class="gauge-cap" style={{ color: band.color }}>{band.caption}</span>
           </>
         ) : (
-          <span class="muted">Waiting for your first Copilot turn…</span>
+          <span class="muted">
+            {f ? 'Model context limit unavailable' : 'Waiting for your first measured Copilot turn…'}
+          </span>
         )}
       </div>
 
       {series.length > 1 && (
         <div class="gauge-graphwrap">
           <span class="gauge-graphtitle">
-            This chat: tokens carried per turn{sampled ? ` · ${series.length} turns` : ''}
+            Input context per turn
+            {turnRange.total > series.length
+              ? ` · latest ${series.length} of ${turnRange.total} turns`
+              : ''}
           </span>
           <div class="gauge-graph">
             <div class="gauge-yaxis">
@@ -92,7 +102,7 @@ export function ContextWeightPanel({ forecast }: { forecast?: ForecastView }) {
             <div
               class="gauge-plot"
               role="img"
-              aria-label={`Context trend across ${series.length} turns; peak ${fmtNum(peak)} tokens; ${resets} resets`}
+              aria-label={`Context trend across turns ${turnRange.start} to ${turnRange.end}; peak ${fmtNum(peak)} tokens; ${resets} likely summarizations`}
             >
               <div class="gauge-spark">
                 {bars.map((d, i) => (
@@ -123,14 +133,26 @@ export function ContextWeightPanel({ forecast }: { forecast?: ForecastView }) {
             </div>
           </div>
           <div class="gauge-sparkaxis">
-            <span>turn 1</span>
-            <span title="A reset is when Copilot auto-summarizes the chat near the limit, collapsing the carried context.">
-              {resets > 0 ? `${resets} reset${resets > 1 ? 's' : ''}` : ''}
+            <span>turn {turnRange.start}</span>
+            <span title="A sharp drop usually means Copilot summarized the chat and replaced older context with a shorter recap.">
+              {resets > 0 ? `${resets} summarization${resets > 1 ? 's' : ''}` : ''}
             </span>
-            <span>now (turn {series.length})</span>
+            <span>now (turn {turnRange.end})</span>
           </div>
         </div>
       )}
     </section>
   );
+}
+
+export function contextTurnRange(
+  seriesLength: number,
+  startTurn?: number,
+  totalTurns?: number,
+): { start: number; end: number; total: number } {
+  if (seriesLength <= 0) return { start: 0, end: 0, total: Math.max(0, totalTurns ?? 0) };
+  const total = Math.max(seriesLength, totalTurns ?? seriesLength);
+  const start = Math.max(1, startTurn ?? total - seriesLength + 1);
+  const end = start + seriesLength - 1;
+  return { start, end, total: Math.max(end, total) };
 }

@@ -1,3 +1,5 @@
+import { parseChatSessionLines, type ChatSessionLine } from './chatSessionLines';
+
 /** Real per-turn token + credit counts, keyed by request/turn index. */
 export interface PromptTokenDetail {
   category: string;
@@ -25,8 +27,10 @@ const TOKEN_FIELDS = ['promptTokens', 'completionTokens', 'copilotCredits'] as c
  * `promptTokens` is the FULL model input (system + context + history + prompt),
  * so it reflects true usage — not just the visible prompt text.
  */
-export function parseChatSessionTokens(content: string): Map<number, TurnTokens> {
-  const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+export function parseChatSessionTokens(
+  content: string,
+  lines: readonly ChatSessionLine[] = parseChatSessionLines(content),
+): Map<number, TurnTokens> {
   const byTurn = new Map<number, TurnTokens>();
 
   const set = (idx: number, field: string, value: unknown): void => {
@@ -51,14 +55,7 @@ export function parseChatSessionTokens(content: string): Map<number, TurnTokens>
     byTurn.set(idx, cur);
   };
 
-  for (const line of lines) {
-    let parsed: { kind?: number; k?: unknown[]; v?: any };
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
+  for (const parsed of lines) {
     if (parsed.kind === 0 && Array.isArray(parsed.v?.requests)) {
       parsed.v.requests.forEach((req: any, i: number) => {
         if (!req || typeof req !== 'object') return;

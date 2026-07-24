@@ -93,6 +93,15 @@ describe('CopilotUsageAdapter', () => {
       expect(serialized).not.toContain(forbidden);
     }
 
+    const cachedScan = await adapter.scan([{
+      sessionId: 'secret-session-id',
+      workspaceHash: hash,
+      transcriptPath,
+      chatSessionPath,
+      modifiedMs: 1,
+    }]);
+    expect(cachedScan.observations[0]).toBe(row);
+
     const rescanned = await adapter.scan([{
       sessionId: 'secret-session-id',
       workspaceHash: hash,
@@ -135,5 +144,91 @@ describe('CopilotUsageAdapter', () => {
     }, session);
     expect(reindexed).toBe(first);
     expect(later).not.toBe(first);
+  });
+
+  it('does not cache an incomplete scan when an expected source later recovers', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenlens-adapter-'));
+    tempDirs.push(root);
+    const hash = 'workspace-hash';
+    const missingDir = join(root, 'missing-then-recovered');
+    const chatSessionPath = join(missingDir, 'chat.jsonl');
+    const session = {
+      sessionId: 'recoverable-session',
+      workspaceHash: hash,
+      chatSessionPath,
+      modifiedMs: 1,
+      sourceBytes: 100,
+      sourceSignature: 'same-source-metadata',
+    };
+    const adapter = new CopilotUsageAdapter(root);
+
+    const failed = await adapter.scan([session]);
+    expect(failed.health.status).toBe('error');
+    expect(failed.observations).toEqual([]);
+
+    mkdirSync(missingDir, { recursive: true });
+    writeFileSync(chatSessionPath, JSON.stringify({
+      kind: 0,
+      v: {
+        sessionId: 'recoverable-session',
+        requests: [{
+          requestId: 'request-recovered',
+          message: { text: 'Recovered usage' },
+          promptTokens: 1_000,
+          completionTokens: 100,
+        }],
+      },
+    }));
+    const recovered = await adapter.scan([session]);
+
+    expect(recovered.health.status).toBe('ready');
+    expect(recovered.observations).toHaveLength(1);
+  });
+
+  it('reprojects a cached session when only workspace metadata changes', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'tokenlens-adapter-'));
+    tempDirs.push(root);
+    const hash = 'workspace-hash';
+    const workspaceDir = join(root, hash);
+    mkdirSync(workspaceDir, { recursive: true });
+    const workspacePath = join(workspaceDir, 'workspace.json');
+    const chatSessionPath = join(root, 'chat.jsonl');
+    writeFileSync(workspacePath, JSON.stringify({ folder: 'file:///C:/Projects/first-name' }));
+    writeFileSync(chatSessionPath, JSON.stringify({
+      kind: 0,
+      v: {
+        sessionId: 'project-session',
+        requests: [{
+          requestId: 'request-project',
+          message: { text: 'Project prompt' },
+          promptTokens: 1_000,
+          completionTokens: 100,
+        }],
+      },
+    }));
+    const adapter = new CopilotUsageAdapter(root);
+    const source = {
+      sessionId: 'project-session',
+      workspaceHash: hash,
+      chatSessionPath,
+      modifiedMs: 1,
+      sourceBytes: 100,
+      sourceSignature: 'unchanged-chat-source',
+      workspaceSignature: 'workspace-v1',
+    };
+
+    const first = await adapter.scan([source]);
+    expect(first.observations[0].project.name).toBe('first-name');
+
+    writeFileSync(workspacePath, JSON.stringify({ folder: 'file:///C:/Projects/second-name' }));
+    const second = await adapter.scan([{
+      ...source,
+      workspaceSignature: 'workspace-v2',
+    }]);
+
+    expect(second.observations[0].project.name).toBe('second-name');
+    expect(second.observations[0].sourceRecordId).toBe(
+      first.observations[0].sourceRecordId,
+    );
   });
 });

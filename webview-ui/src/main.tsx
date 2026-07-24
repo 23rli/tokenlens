@@ -1,6 +1,6 @@
 import { render } from 'preact';
 import { App } from './App';
-import './styles.css';
+import './dashboard.css';
 
 const root = document.getElementById('root');
 if (root) {

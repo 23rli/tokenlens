@@ -122,6 +122,74 @@ function median(xs: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
+/** Small binary heap used to maintain an exact running median in O(log n). */
+class NumberHeap {
+  private readonly values: number[] = [];
+
+  constructor(private readonly before: (a: number, b: number) => boolean) {}
+
+  get size(): number {
+    return this.values.length;
+  }
+
+  peek(): number {
+    return this.values[0];
+  }
+
+  push(value: number): void {
+    this.values.push(value);
+    let index = this.values.length - 1;
+    while (index > 0) {
+      const parent = Math.floor((index - 1) / 2);
+      if (!this.before(this.values[index], this.values[parent])) break;
+      [this.values[index], this.values[parent]] = [this.values[parent], this.values[index]];
+      index = parent;
+    }
+  }
+
+  pop(): number {
+    const top = this.values[0];
+    const last = this.values.pop()!;
+    if (this.values.length === 0) return top;
+    this.values[0] = last;
+    let index = 0;
+    while (true) {
+      const left = index * 2 + 1;
+      const right = left + 1;
+      let best = index;
+      if (left < this.values.length && this.before(this.values[left], this.values[best])) best = left;
+      if (right < this.values.length && this.before(this.values[right], this.values[best])) best = right;
+      if (best === index) break;
+      [this.values[index], this.values[best]] = [this.values[best], this.values[index]];
+      index = best;
+    }
+    return top;
+  }
+}
+
+class RunningMedian {
+  private readonly lower = new NumberHeap((a, b) => a > b);
+  private readonly upper = new NumberHeap((a, b) => a < b);
+
+  get size(): number {
+    return this.lower.size + this.upper.size;
+  }
+
+  add(value: number): void {
+    if (this.lower.size === 0 || value <= this.lower.peek()) this.lower.push(value);
+    else this.upper.push(value);
+    if (this.lower.size > this.upper.size + 1) this.upper.push(this.lower.pop());
+    else if (this.upper.size > this.lower.size) this.lower.push(this.upper.pop());
+  }
+
+  value(): number {
+    if (this.size === 0) return 0;
+    return this.lower.size === this.upper.size
+      ? (this.lower.peek() + this.upper.peek()) / 2
+      : this.lower.peek();
+  }
+}
+
 /**
  * Per-turn growth we couldn't attribute to the known parts (≈ tool-result tokens
  * added to history). Learned from the session's own turns, so it adapts to how
@@ -163,15 +231,6 @@ function learnGrowth(history: TurnHistory[]): { growth: number; variance: number
   return { growth, variance: cv };
 }
 
-/** The core point prediction — shared by the forecast and its self-calibration. */
-function pointPredict(history: TurnHistory[], draftTokens: number): number {
-  if (history.length === 0) return COLD_START_OVERHEAD + draftTokens;
-  const last = history[history.length - 1];
-  const carriedContext = last.promptTokens + (last.completionTokens ?? 0);
-  const { growth } = learnGrowth(history);
-  return Math.round(carriedContext + growth + draftTokens);
-}
-
 /**
  * Self-calibrate the prediction interval from THIS session's own history: replay
  * the point predictor over past turns, collect actual/predicted ratios, and use
@@ -182,12 +241,33 @@ function pointPredict(history: TurnHistory[], draftTokens: number): number {
  */
 function calibrateInterval(history: TurnHistory[]): { low: number; high: number } {
   const ratios: number[] = [];
+  const residuals = new RunningMedian();
+  const perToolRates = new RunningMedian();
   for (let i = 1; i < history.length; i++) {
-    const point = pointPredict(history.slice(0, i), estimateTokens(history[i].promptText));
+    const previous = history[i - 1];
     const actual = history[i].promptTokens;
+    const draftTokens = estimateTokens(history[i].promptText);
+    let growth = residuals.value();
+    if (typeof previous.toolCalls === 'number' && perToolRates.size >= 3) {
+      growth = Math.max(growth, perToolRates.value() * previous.toolCalls);
+    }
+    const point = Math.round(
+      previous.promptTokens + (previous.completionTokens ?? 0) + growth + draftTokens,
+    );
     if (point > 0 && actual > 0) {
       const r = actual / point;
       if (r >= 0.2 && r <= 8) ratios.push(r); // drop summarization-reset artefacts
+    }
+
+    // Add this transition only AFTER predicting it. The next iteration's prefix
+    // then contains exactly the evidence that the former history.slice replay did.
+    const residual = Math.max(
+      0,
+      actual - previous.promptTokens - (previous.completionTokens ?? 0) - draftTokens,
+    );
+    residuals.add(residual);
+    if (typeof previous.toolCalls === 'number' && previous.toolCalls > 0) {
+      perToolRates.add(residual / previous.toolCalls);
     }
   }
   if (ratios.length < MIN_RATIOS_FOR_CALIBRATION) {

@@ -40,9 +40,9 @@ workaround. Status legend: **Fixed** · **Mitigated** (handled but has a residua
 ## Metering & timing
 
 ### 6. Your latest turn shows as "pending" / the estimate lags a beat
-- **Symptom:** The turn you just sent briefly shows `…` / **in flight** and the next-turn estimate does not move immediately.
+- **Symptom:** The turn you just sent briefly shows `…` / **pending** while its usage is not yet available.
 - **Cause:** A turn only becomes *metered* once Copilot writes its real `promptTokens` to disk — which happens as the turn finishes, a moment after you hit send. The text-only estimate (~your message length) would be wildly wrong for agent turns, so we don't fake it.
-- **Status:** **Inherent** (by design). Token Lens permits at most one recent unmatched request to be **in flight**. Completed requests with no usable source meter are instead labelled **usage unavailable**.
+- **Status:** **Inherent** (by design). Token Lens permits at most one recent unmatched request to be **pending**. Completed requests with no usable source meter are instead labelled **usage unavailable**.
 
 ### 7. A "Context recap" turn you never typed appears in History
 - **Symptom:** Turn 0 (or an early turn) is a "Context recap — what I've asked so far…" you didn't write.
@@ -67,7 +67,7 @@ workaround. Status legend: **Fixed** · **Mitigated** (handled but has a residua
 - **Workaround:** Run the workflow in VS Code GitHub Copilot Chat when live token metering is required.
 
 ### 11. Some completed requests have only one metered token direction
-- **Symptom:** A completed turn is labelled **input measured** or **output measured** instead of fully metered.
+- **Symptom:** A completed turn is labelled **input only** or **output only** instead of fully metered.
 - **Cause:** Copilot can persist `completionTokens` while omitting `promptTokens`, credits, and the category breakdown (or vice versa). This is a source-data gap, not a pending request.
 - **Status:** **Mitigated.** Token Lens includes every independently metered direction instead of dropping the whole request. Totals sum measured directions only; forecasting and context graphs still require fully metered input.
 
@@ -77,13 +77,13 @@ workaround. Status legend: **Fixed** · **Mitigated** (handled but has a residua
 - **Status:** **Fixed in 0.8.2.** Choose **Rebuild from available local history** from the management hub once. This replaces only Token Lens's derived metadata and never edits Copilot source files.
 
 ### 13. Dashboard felt frozen until a reload (older builds)
-- **Symptom:** Stats stuck several turns behind; only updated on click/reload.
-- **Cause:** (a) installs don't take effect until the window reloads; (b) earlier builds refreshed too slowly / only on focus.
-- **Status:** **Fixed.** Now refreshes every ~1.5s + on focus + on panel show. A green **live** dot shows it's updating; it turns amber with "updated Ns ago" if the pipeline actually stalls.
+- **Symptom:** Stats stuck several turns behind, especially around 70–100+ turns or 70–100 retained chats, or only updated on click/reload.
+- **Cause:** (a) installs don't take effect until the window reloads; (b) earlier builds eagerly parsed every historical chat at startup, rebuilt and rescored forecast history on timer ticks, reparsed unchanged sources, and deduplicated watcher events by Copilot's mutable turn index.
+- **Status:** **Fixed.** Forecast history is bounded and incremental; watcher startup is metadata-only; whole-scope history fills progressively; unchanged source/ledger signatures are no-ops; parsed snapshots are reused; and stable request IDs survive compaction renumbering. Live still checks every ~1.5s + on focus + on panel show. A green **live** dot shows it's updating; it turns amber with "updated Ns ago" if the pipeline actually stalls.
 - **Note:** Any new build still requires **Developer: Reload Window** to run.
 
-### 14. The reset-zone indicator does not predict every summarization
-- **Symptom:** Copilot may summarize even when no reset-zone warning appeared, or the warning may appear without an immediate reset.
+### 14. The context-limit warning does not predict every summarization
+- **Symptom:** Copilot may summarize without a warning, or the warning may appear without an immediate summarization.
 - **Cause:** Summarization is not exposed as a pre-turn source signal. The indicator can only use model-relative context proximity and previously observed history.
 - **Status:** **Experimental.** The July 16 expanded-corpus run caught 1 of 10 resets and produced 24 false alarms. Treat the interval and confidence as the primary uncertainty signals; do not present the indicator as reliable reset prediction.
 
@@ -97,12 +97,12 @@ workaround. Status legend: **Fixed** · **Mitigated** (handled but has a residua
 - **Status:** **By design.** Set `tokenlens.impact.usdPerMillionTokens` to your own effective rate for accuracy (or `0` to fall back to a per-credit rate).
 
 ### 16. Cost tiles show 0 / "—" briefly on startup
-- **Symptom:** Total cost is empty before a chat loads.
+- **Symptom:** Usage & cost is empty before a chat loads.
 - **Cause:** Zero-state fallback until the on-disk forecast lands.
 - **Status:** **Expected.** Fills in within ~1.5s once a session is read.
 
 ### 17. Reasoning effort shows blank
-- **Symptom:** "Live Copilot data" shows the model but no reasoning effort.
+- **Symptom:** "Current model" shows the model but no reasoning effort.
 - **Cause:** We only show the effort when the session actually recorded which one was used (many turns don't). We never show the supported *range* (that read as misleading "low–max").
 - **Status:** **By design.**
 
